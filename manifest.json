@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.2.0.0",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.2.0.0/DefaultSettings.zip",
+        "checksum": "4306553e71edd985ea058d1682d63552",
+        "timestamp": "2026-10-23T20:05:57Z",
+        "changelog": "Release v1.2.0.0: Benutzer-Auswahl für Admins, zuverlässiges Serien-Laden und Web-Button-Optimierung"
+      },
+      {
         "version": "1.1.0.0",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.1.0.0/DefaultSettings.zip",
