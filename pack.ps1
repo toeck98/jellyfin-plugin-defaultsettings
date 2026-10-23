@@ -1,6 +1,6 @@
 # Lokales Pack-Skript für DefaultSettings
 param (
-    [string]$Version = "1.1.0.0"
+    [string]$Version = "1.2.0.0"
 )
 
 $ErrorActionPreference = "Stop"

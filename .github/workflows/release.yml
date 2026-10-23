@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versionsnummer (z. B. 1.1.0.0)'
+        description: 'Versionsnummer (z. B. 1.2.0.0)'
         required: true
-        default: '1.1.0.0'
+        default: '1.2.0.0'
 
 permissions:
   contents: write
@@ -85,29 +85,19 @@ jobs:
           git checkout main
           git pull origin main --rebase
 
-          # manifest.json mit neuer Version aktualisieren
-          cat <<EOF > manifest.json
-          [
-            {
-              "guid": "2ff22cec-2c92-4428-a1b3-d1ff33748bf2",
-              "name": "DefaultSettings",
-              "description": "Ermöglicht Benutzern, benutzerdefinierte Standardeinstellungen für Medienversionen (z. B. Bunt vs. Schwarz/Weiß) und serienspezifische Ton- und Untertitelspuren festzulegen. Verfügt über einen Button direkt auf der Serien-Detailseite im Web und wirkt nahtlos über alle Jellyfin-Apps hinweg.",
-              "overview": "Serienspezifische Voreinstellungen für Medienversionen und Tonspuren mit Direktbutton auf der Serienseite.",
-              "owner": "${OWNER}",
-              "category": "General",
-              "versions": [
-                {
-                  "version": "${VERSION}",
-                  "targetAbi": "10.9.0.0",
-                  "sourceUrl": "https://github.com/${REPO}/releases/download/v${VERSION}/DefaultSettings.zip",
-                  "checksum": "${CHECKSUM}",
-                  "timestamp": "${DATE}",
-                  "changelog": "Release v${VERSION} für Jellyfin 10.9+"
-                }
-              ]
-            }
-          ]
-          EOF
+          # manifest.json mit neuer Version aktualisieren (historische Versionen beibehalten)
+          jq --arg v "$VERSION" --arg c "$CHECKSUM" --arg r "$REPO" --arg d "$DATE" '
+            .[0].versions = [
+              {
+                version: $v,
+                targetAbi: "10.9.0.0",
+                sourceUrl: ("https://github.com/" + $r + "/releases/download/v" + $v + "/DefaultSettings.zip"),
+                checksum: $c,
+                timestamp: $d,
+                changelog: ("Release v" + $v + ": Benutzer-Auswahl für Admins, zuverlässiges Serien-Laden und Web-Button-Optimierung")
+              }
+            ] + (.[0].versions | map(select(.version != $v)))
+          ' manifest.json > manifest.tmp.json && mv manifest.tmp.json manifest.json
 
           git add manifest.json
           git commit -m "chore: update manifest.json to v${VERSION} [skip ci]" || echo "Keine Änderungen zum Committen."

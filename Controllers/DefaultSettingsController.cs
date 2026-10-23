@@ -69,26 +69,72 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Ruft die Einstellungen des aktuell angemeldeten Benutzers ab.
-    /// GET: /Plugins/DefaultSettings/MyPreferences
+    /// Ruft alle Benutzer des Systems ab (für Admins) bzw. den aktuellen Benutzer.
+    /// GET: /Plugins/DefaultSettings/Users
     /// </summary>
-    [HttpGet("MyPreferences")]
+    [HttpGet("Users")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<UserPreferencesDto> GetMyPreferences()
+    public ActionResult<List<UserInfoDto>> GetUsers()
     {
-        var user = GetCurrentUser();
-        if (user == null)
+        var caller = GetCurrentUser();
+        if (caller == null)
         {
             return Unauthorized("Benutzer konnte nicht authentifiziert werden.");
         }
 
-        var pref = _settingsManager.GetUserPreferences(user.Id);
-        bool isAdmin = user.HasPermission(PermissionKind.IsAdministrator);
+        bool isAdmin = caller.HasPermission(PermissionKind.IsAdministrator);
+        if (!isAdmin)
+        {
+            return Ok(new List<UserInfoDto>
+            {
+                new() { Id = caller.Id, Name = caller.Username, IsAdmin = false }
+            });
+        }
+
+        var users = _userManager.Users
+            .Select(u => new UserInfoDto
+            {
+                Id = u.Id,
+                Name = u.Username,
+                IsAdmin = u.HasPermission(PermissionKind.IsAdministrator)
+            })
+            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Ok(users);
+    }
+
+    /// <summary>
+    /// Ruft die Einstellungen des Benutzers ab. Admins können targetUserId übergeben.
+    /// GET: /Plugins/DefaultSettings/MyPreferences?targetUserId=...
+    /// </summary>
+    [HttpGet("MyPreferences")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<UserPreferencesDto> GetMyPreferences([FromQuery] Guid? targetUserId = null)
+    {
+        var caller = GetCurrentUser();
+        if (caller == null)
+        {
+            return Unauthorized("Benutzer konnte nicht authentifiziert werden.");
+        }
+
+        bool isAdmin = caller.HasPermission(PermissionKind.IsAdministrator);
+        var targetUser = caller;
+        if (targetUserId.HasValue && isAdmin)
+        {
+            var requested = _userManager.GetUserById(targetUserId.Value);
+            if (requested != null)
+            {
+                targetUser = requested;
+            }
+        }
+
+        var pref = _settingsManager.GetUserPreferences(targetUser.Id);
 
         return Ok(new UserPreferencesDto
         {
-            UserId = user.Id,
-            Username = user.Username,
+            UserId = targetUser.Id,
+            Username = targetUser.Username,
             IsAdmin = isAdmin,
             PreferredAudioLanguage = pref.PreferredAudioLanguage,
             PreferredSubtitleLanguage = pref.PreferredSubtitleLanguage,
@@ -99,22 +145,81 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Ruft die Liste aller Serien der Mediathek ab.
+    /// Ruft die Liste aller Serien der Mediathek ab (nutzt mehrere Abfragestrategien).
     /// GET: /Plugins/DefaultSettings/Series
     /// </summary>
     [HttpGet("Series")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<List<SeriesInfoDto>> GetSeries()
+    public ActionResult<List<SeriesInfoDto>> GetSeries([FromQuery] Guid? targetUserId = null)
     {
-        var query = new InternalItemsQuery
+        var caller = GetCurrentUser();
+        var targetUser = caller;
+        if (targetUserId.HasValue && caller != null && caller.HasPermission(PermissionKind.IsAdministrator))
         {
-            IncludeItemTypes = new[] { BaseItemKind.Series },
-            Recursive = true
-        };
+            targetUser = _userManager.GetUserById(targetUserId.Value) ?? caller;
+        }
 
-        var items = _libraryManager.GetItemList(query);
-        var result = items
-            .OfType<Series>()
+        var seriesDict = new Dictionary<Guid, Series>();
+
+        // Strategie 1: In-Memory Durchsuchung des Root-Folders
+        try
+        {
+            var rootSeries = _libraryManager.RootFolder?.GetRecursiveChildren(i => i is Series);
+            if (rootSeries != null)
+            {
+                foreach (var s in rootSeries.OfType<Series>())
+                {
+                    seriesDict[s.Id] = s;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Fehler beim Abrufen von Serien über RootFolder.");
+        }
+
+        // Strategie 2: Query mit Benutzerkontext (falls vorhanden)
+        if (targetUser != null)
+        {
+            try
+            {
+                var userQuery = new InternalItemsQuery(targetUser)
+                {
+                    IncludeItemTypes = new[] { BaseItemKind.Series },
+                    Recursive = true
+                };
+                var userItems = _libraryManager.GetItemList(userQuery);
+                foreach (var s in userItems.OfType<Series>())
+                {
+                    seriesDict[s.Id] = s;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Fehler beim Abrufen von Serien mit User-Query.");
+            }
+        }
+
+        // Strategie 3: Globale InternalItemsQuery
+        try
+        {
+            var globalQuery = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { BaseItemKind.Series },
+                Recursive = true
+            };
+            var globalItems = _libraryManager.GetItemList(globalQuery);
+            foreach (var s in globalItems.OfType<Series>())
+            {
+                seriesDict[s.Id] = s;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Fehler beim Abrufen von Serien mit globaler Query.");
+        }
+
+        var result = seriesDict.Values
             .Select(s => new SeriesInfoDto
             {
                 Id = s.Id,
@@ -128,20 +233,24 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Ruft den Override für eine bestimmte Serie des aktuellen Nutzers ab.
+    /// Ruft den Override für eine bestimmte Serie des Nutzers ab.
     /// GET: /Plugins/DefaultSettings/Series/{seriesId}
     /// </summary>
     [HttpGet("Series/{seriesId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<SeriesPreferenceOverride?> GetSeriesOverrideDirect([FromRoute] Guid seriesId)
+    public ActionResult<SeriesPreferenceOverride?> GetSeriesOverrideDirect([FromRoute] Guid seriesId, [FromQuery] Guid? targetUserId = null)
     {
-        var user = GetCurrentUser();
-        if (user == null)
+        var caller = GetCurrentUser();
+        if (caller == null)
         {
             return Unauthorized();
         }
 
-        var overrideItem = _settingsManager.GetSeriesOverride(user.Id, seriesId);
+        var uid = (targetUserId.HasValue && caller.HasPermission(PermissionKind.IsAdministrator))
+            ? targetUserId.Value
+            : caller.Id;
+
+        var overrideItem = _settingsManager.GetSeriesOverride(uid, seriesId);
         return Ok(overrideItem);
     }
 
@@ -230,20 +339,24 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Speichert oder aktualisiert den Override für eine bestimmte Serie beim aktuellen Benutzer.
+    /// Speichert oder aktualisiert den Override für eine bestimmte Serie beim angegebenen bzw. aktuellen Benutzer.
     /// POST: /Plugins/DefaultSettings/Series/{seriesId}
     /// </summary>
     [HttpPost("Series/{seriesId}")]
     [HttpPost("MyPreferences/Series/{seriesId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult SaveSeriesOverride([FromRoute] Guid seriesId, [FromBody] SaveSeriesOverrideRequest request)
+    public ActionResult SaveSeriesOverride([FromRoute] Guid seriesId, [FromBody] SaveSeriesOverrideRequest request, [FromQuery] Guid? targetUserId = null)
     {
-        var user = GetCurrentUser();
-        if (user == null)
+        var caller = GetCurrentUser();
+        if (caller == null)
         {
             return Unauthorized();
         }
+
+        var uid = (targetUserId.HasValue && caller.HasPermission(PermissionKind.IsAdministrator))
+            ? targetUserId.Value
+            : caller.Id;
 
         var series = _libraryManager.GetItemById(seriesId) as Series;
         if (series == null)
@@ -261,27 +374,31 @@ public class DefaultSettingsController : ControllerBase
             PreferredVersion = string.IsNullOrWhiteSpace(request.PreferredVersion) ? null : request.PreferredVersion.Trim()
         };
 
-        _settingsManager.SaveSeriesOverride(user.Id, overrideItem);
+        _settingsManager.SaveSeriesOverride(uid, overrideItem);
         return Ok(new { Success = true });
     }
 
     /// <summary>
-    /// Entfernt den Override für eine bestimmte Serie beim aktuellen Benutzer.
+    /// Entfernt den Override für eine bestimmte Serie beim angegebenen bzw. aktuellen Benutzer.
     /// DELETE: /Plugins/DefaultSettings/Series/{seriesId}
     /// DELETE: /Plugins/DefaultSettings/MyPreferences/Series/{seriesId}
     /// </summary>
     [HttpDelete("Series/{seriesId}")]
     [HttpDelete("MyPreferences/Series/{seriesId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult DeleteSeriesOverride([FromRoute] Guid seriesId)
+    public ActionResult DeleteSeriesOverride([FromRoute] Guid seriesId, [FromQuery] Guid? targetUserId = null)
     {
-        var user = GetCurrentUser();
-        if (user == null)
+        var caller = GetCurrentUser();
+        if (caller == null)
         {
             return Unauthorized();
         }
 
-        _settingsManager.DeleteSeriesOverride(user.Id, seriesId);
+        var uid = (targetUserId.HasValue && caller.HasPermission(PermissionKind.IsAdministrator))
+            ? targetUserId.Value
+            : caller.Id;
+
+        _settingsManager.DeleteSeriesOverride(uid, seriesId);
         return Ok(new { Success = true });
     }
 

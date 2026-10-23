@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -31,13 +32,20 @@ public class WebInjectionMiddleware
         bool isWebIndex = path.Equals("/", StringComparison.OrdinalIgnoreCase) ||
                           path.Equals("/web", StringComparison.OrdinalIgnoreCase) ||
                           path.Equals("/web/", StringComparison.OrdinalIgnoreCase) ||
-                          path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase);
+                          path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase) ||
+                          path.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
 
         if (!isWebIndex)
         {
             await _next(context).ConfigureAwait(false);
             return;
         }
+
+        // 1. Verhindere, dass der Server die index.html komprimiert oder mit 304 Not Modified quittiert
+        context.Request.Headers.Remove("Accept-Encoding");
+        context.Request.Headers["Accept-Encoding"] = "identity";
+        context.Request.Headers.Remove("If-None-Match");
+        context.Request.Headers.Remove("If-Modified-Since");
 
         var originalBodyStream = context.Response.Body;
         using var memoryStream = new MemoryStream();
@@ -56,9 +64,9 @@ public class WebInjectionMiddleware
 
                 if (!html.Contains("/Plugins/DefaultSettings/ClientScript", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (html.Contains("</body>", StringComparison.OrdinalIgnoreCase))
+                    if (Regex.IsMatch(html, "</body>", RegexOptions.IgnoreCase))
                     {
-                        html = html.Replace("</body>", ScriptTag + "</body>", StringComparison.OrdinalIgnoreCase);
+                        html = Regex.Replace(html, "</body>", ScriptTag + "</body>", RegexOptions.IgnoreCase);
                     }
                     else
                     {
@@ -69,6 +77,12 @@ public class WebInjectionMiddleware
                 }
 
                 var modifiedBytes = Encoding.UTF8.GetBytes(html);
+
+                // Cache-Busting für die injizierte index.html
+                context.Response.Headers.Remove("ETag");
+                context.Response.Headers.Remove("Last-Modified");
+                context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+
                 context.Response.Body = originalBodyStream;
                 context.Response.ContentLength = modifiedBytes.Length;
                 await originalBodyStream.WriteAsync(modifiedBytes).ConfigureAwait(false);

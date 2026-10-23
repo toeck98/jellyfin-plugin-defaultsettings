@@ -2,60 +2,85 @@
 (function () {
     'use strict';
 
-    console.log('[DefaultSettings] Client-Skript initialisiert.');
+    console.log('[DefaultSettings] Client-Skript erfolgreich initialisiert.');
 
-    function getHashParams() {
+    function getActiveItemId() {
+        // 1. Aus dem Hash (?id=... oder &id=...)
         const hash = window.location.hash || '';
-        const qIndex = hash.indexOf('?');
-        if (qIndex === -1) return new URLSearchParams();
-        return new URLSearchParams(hash.substring(qIndex + 1));
+        if (hash.includes('?')) {
+            const params = new URLSearchParams(hash.substring(hash.indexOf('?') + 1));
+            const id = params.get('id') || params.get('itemId');
+            if (id) return id;
+        }
+
+        // 2. Aus der Standard-URL Query
+        const searchParams = new URLSearchParams(window.location.search);
+        const searchId = searchParams.get('id') || searchParams.get('itemId');
+        if (searchId) return searchId;
+
+        // 3. Aus dem data-id Attribut der aktiven Seite im DOM
+        const activeContainer = document.querySelector('div#itemDetailPage:not(.hide), .detailPageWrapperContainer:not(.hide), .page:not(.hide)[data-role="page"]');
+        if (activeContainer) {
+            const dataId = activeContainer.getAttribute('data-id') || activeContainer.getAttribute('data-itemid');
+            if (dataId) return dataId;
+        }
+
+        return null;
     }
 
-    function isSeriesDetailPage() {
-        const hash = window.location.hash || '';
-        return hash.includes('/details') || hash.includes('#/details');
+    function isDetailPage() {
+        const hash = (window.location.hash || '').toLowerCase();
+        const href = (window.location.href || '').toLowerCase();
+        return hash.includes('details') || hash.includes('item') || href.includes('id=');
     }
-
-    let lastCheckedItemId = null;
 
     function checkAndInjectButton() {
-        if (!isSeriesDetailPage()) {
-            lastCheckedItemId = null;
+        if (!isDetailPage()) {
             return;
         }
 
-        const params = getHashParams();
-        const itemId = params.get('id');
-        if (!itemId) return;
-
-        // Falls wir diesen Button für dieses Item bereits hinzugefügt haben
-        if (document.querySelector('#btnDefaultSettings[data-itemid="' + itemId + '"]')) {
+        const itemId = getActiveItemId();
+        if (!itemId) {
             return;
         }
 
-        if (typeof ApiClient === 'undefined') {
+        if (typeof ApiClient === 'undefined' || !ApiClient.getCurrentUserId) {
             return;
         }
 
-        const currentUserId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : null;
-        if (!currentUserId) return;
+        const currentUserId = ApiClient.getCurrentUserId();
+        if (!currentUserId) {
+            return;
+        }
 
+        // Suche den aktiven (sichtbaren) Container der Detailseite
+        const activePage = document.querySelector('div#itemDetailPage:not(.hide), .detailPageWrapperContainer:not(.hide), .pageContainer:not(.hide), .page:not(.hide)') || document;
+
+        // Falls auf der aktiven Seite bereits ein Button für diese Item-ID existiert
+        if (activePage.querySelector('#btnDefaultSettings[data-itemid="' + itemId + '"]')) {
+            return;
+        }
+
+        // Container für Buttons auf der aktiven Seite suchen
+        const btnContainer = activePage.querySelector('.mainDetailButtons') 
+            || activePage.querySelector('.detailButtons')
+            || activePage.querySelector('.detailRibbon')
+            || activePage.querySelector('.detailPagePrimaryContainer')
+            || document.querySelector('.mainDetailButtons:not(.hide)');
+
+        if (!btnContainer) {
+            return;
+        }
+
+        // Prüfen, ob es sich wirklich um eine Serie handelt
         ApiClient.getItem(currentUserId, itemId).then(function (item) {
             if (!item || item.Type !== 'Series') {
                 return;
             }
 
-            // Container für Detail-Buttons suchen
-            const btnContainer = document.querySelector('.mainDetailButtons') 
-                || document.querySelector('.detailButtons')
-                || document.querySelector('.detailRibbon')
-                || document.querySelector('.detailPagePrimaryContainer');
-
-            if (!btnContainer) return;
-
-            // Altes Element entfernen falls vorhanden
-            const existingBtn = document.querySelector('#btnDefaultSettings');
-            if (existingBtn) existingBtn.remove();
+            // Altes Element auf dieser Seite entfernen
+            const oldBtn = activePage.querySelector('#btnDefaultSettings');
+            if (oldBtn) oldBtn.remove();
 
             const btn = document.createElement('button');
             btn.id = 'btnDefaultSettings';
@@ -67,6 +92,7 @@
             btn.style.display = 'inline-flex';
             btn.style.alignItems = 'center';
             btn.style.cursor = 'pointer';
+            btn.style.verticalAlign = 'middle';
             btn.innerHTML = '<i class="md-icon" style="margin-right: 0.4em;">tune</i><span>Standard-Spuren / Version</span>';
 
             btn.onclick = function (e) {
@@ -76,6 +102,7 @@
             };
 
             btnContainer.appendChild(btn);
+            console.log('[DefaultSettings] Einstellungs-Button für Serie "' + item.Name + '" eingefügt.');
         }).catch(function (err) {
             console.debug('[DefaultSettings] Item-Prüfung:', err);
         });
@@ -310,6 +337,8 @@
 
     // Beobachter & Event-Listener für Navigation
     window.addEventListener('hashchange', checkAndInjectButton);
+    document.addEventListener('viewshow', checkAndInjectButton);
+    document.addEventListener('pageshow', checkAndInjectButton);
     setInterval(checkAndInjectButton, 1000);
     checkAndInjectButton();
 })();

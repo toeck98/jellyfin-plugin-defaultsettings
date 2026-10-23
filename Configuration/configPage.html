@@ -14,13 +14,25 @@
                     <h1 class="sectionTitle">DefaultSettings</h1>
                     <div class="fieldDescription">
                         Verwalten Sie serienspezifische Standardeinstellungen für Audio, Untertitel und Schnittfassungen/Versionen (z. B. Bunt vs. Schwarz/Weiß). 
-                        <br><strong>Tipp:</strong> Sie können diese Einstellungen auch <em>direkt auf der Detailseite jeder Serie</em> über den neuen Button <strong>„Standard-Spuren / Version“</strong> öffnen und anpassen!
+                        <br><strong>Tipp:</strong> Sie können diese Einstellungen auch <em>direkt auf der Detailseite jeder Serie</em> über den Button <strong>„Standard-Spuren / Version“</strong> öffnen und anpassen!
+                    </div>
+                </div>
+
+                <!-- Benutzer-Auswahl (insbesondere für Administratoren) -->
+                <div class="verticalSection" id="secUserSelection" style="margin-top: 1.5em;">
+                    <h2 class="sectionTitle">Benutzerkonto</h2>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="selUser">Aktives Benutzerkonto</label>
+                        <select id="selUser" class="emby-select">
+                            <option value="">Lade Benutzerkonten...</option>
+                        </select>
+                        <div class="fieldDescription">Wählen Sie das Benutzerkonto aus, dessen serienspezifische Standardeinstellungen Sie bearbeiten möchten.</div>
                     </div>
                 </div>
 
                 <!-- Serieneinstellungen Formular -->
                 <div class="verticalSection">
-                    <h2 class="sectionTitle">Serien-Standardeinstellungen & Versionen</h2>
+                    <h2 class="sectionTitle" id="lblFormHeader">Serien-Standardeinstellungen &amp; Versionen</h2>
 
                     <form id="seriesOverrideForm">
                         <div class="selectContainer">
@@ -28,6 +40,7 @@
                             <select id="selSeries" class="emby-select">
                                 <option value="">-- Bitte Serie wählen --</option>
                             </select>
+                            <div class="fieldDescription" id="lblSeriesCount" style="color: #888; font-size: 0.85em; margin-top: 0.2em;"></div>
                         </div>
 
                         <!-- Info-Box über erkannte Versionen und Sprachen -->
@@ -53,6 +66,7 @@
                                 <option value="jpn">Japanisch (jpn)</option>
                                 <option value="fra">Französisch (fra)</option>
                                 <option value="spa">Spanisch (spa)</option>
+                                <option value="ita">Italienisch (ita)</option>
                                 <option value="custom">Anderer Sprachcode...</option>
                             </select>
                         </div>
@@ -97,7 +111,7 @@
                     </form>
 
                     <!-- Tabelle aller aktiven Overrides -->
-                    <h3 style="margin-top: 2.5em;">Aktive Serien-Ausnahmen</h3>
+                    <h3 style="margin-top: 2.5em;" id="lblOverridesTitle">Aktive Serien-Ausnahmen</h3>
                     <div id="seriesOverridesContainer" style="margin-top: 1em;">
                         <p id="lblNoOverrides" style="color: #888;">Noch keine serienspezifischen Ausnahmen angelegt.</p>
                         <div id="tableOverrides" style="display: none; width: 100%; overflow-x: auto;">
@@ -148,6 +162,8 @@
                 const page = document.querySelector("#DefaultSettingsConfigPage");
                 let currentPreferences = null;
                 let availableSeries = [];
+                let availableUsers = [];
+                let activeUserId = "";
 
                 function getSubModeLabel(mode) {
                     if (mode === 0 || mode === "0") return "Nur Forced";
@@ -159,22 +175,107 @@
 
                 page.addEventListener("pageshow", function () {
                     Dashboard.showLoadingMsg();
-                    loadData();
+                    initUsersAndLoad();
                 });
 
-                function loadData() {
-                    const userId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
-                    const userParam = userId ? "?userId=" + userId : "";
+                function initUsersAndLoad() {
+                    activeUserId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
 
-                    Promise.all([
-                        ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/MyPreferences" + userParam)),
-                        ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Series" + userParam))
-                    ]).then(function (results) {
+                    ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Users")).then(function (users) {
+                        availableUsers = users || [];
+                        renderUserDropdown(availableUsers);
+
+                        // Falls der aktuelle Benutzer in der Liste ist, vorwählen
+                        const selUser = document.querySelector("#selUser");
+                        if (availableUsers.some(u => u.Id === activeUserId)) {
+                            selUser.value = activeUserId;
+                        } else if (availableUsers.length > 0) {
+                            activeUserId = availableUsers[0].Id;
+                            selUser.value = activeUserId;
+                        }
+
+                        loadDataForUser(activeUserId);
+                    }).catch(function (err) {
+                        console.warn("Konnte Benutzerliste nicht über Plugin laden, Fallback auf ApiClient:", err);
+                        if (ApiClient.getUsers) {
+                            ApiClient.getUsers().then(function (users) {
+                                availableUsers = users.map(u => ({ Id: u.Id, Name: u.Name, IsAdmin: u.Policy && u.Policy.IsAdministrator }));
+                                renderUserDropdown(availableUsers);
+                                document.querySelector("#selUser").value = activeUserId;
+                                loadDataForUser(activeUserId);
+                            }).catch(function () {
+                                loadDataForUser(activeUserId);
+                            });
+                        } else {
+                            loadDataForUser(activeUserId);
+                        }
+                    });
+                }
+
+                function renderUserDropdown(users) {
+                    const sel = document.querySelector("#selUser");
+                    sel.innerHTML = "";
+
+                    if (!users || users.length === 0) {
+                        const opt = document.createElement("option");
+                        opt.value = activeUserId;
+                        opt.textContent = "Aktueller Benutzer";
+                        sel.appendChild(opt);
+                        return;
+                    }
+
+                    users.forEach(function (u) {
+                        const opt = document.createElement("option");
+                        opt.value = u.Id;
+                        opt.textContent = u.Name + (u.IsAdmin ? " (Admin)" : "");
+                        sel.appendChild(opt);
+                    });
+                }
+
+                document.querySelector("#selUser").addEventListener("change", function () {
+                    activeUserId = this.value;
+                    Dashboard.showLoadingMsg();
+                    loadDataForUser(activeUserId);
+                });
+
+                function loadDataForUser(userId) {
+                    const userParam = userId ? "?targetUserId=" + userId : "";
+
+                    // Lade Einstellungen des ausgewählten Benutzers
+                    const prefPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/MyPreferences" + userParam));
+
+                    // Lade Serien: Erst über natives ApiClient.getItems, parallel über Plugin-Controller
+                    const nativeSeriesPromise = ApiClient.getItems ? ApiClient.getItems(userId, {
+                        IncludeItemTypes: "Series",
+                        Recursive: true,
+                        SortBy: "SortName"
+                    }).catch(e => ({ Items: [] })) : Promise.resolve({ Items: [] });
+
+                    const pluginSeriesPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Series" + userParam)).catch(e => []);
+
+                    Promise.all([prefPromise, nativeSeriesPromise, pluginSeriesPromise]).then(function (results) {
                         currentPreferences = results[0] || {};
-                        availableSeries = results[1] || [];
+                        const nativeItems = (results[1] && results[1].Items) ? results[1].Items : [];
+                        const pluginItems = Array.isArray(results[2]) ? results[2] : [];
+
+                        // Serien zusammenführen und deduplizieren
+                        const seriesMap = new Map();
+                        pluginItems.forEach(s => seriesMap.set(s.Id, { Id: s.Id, Name: s.Name, SortName: s.SortName }));
+                        nativeItems.forEach(s => seriesMap.set(s.Id, { Id: s.Id, Name: s.Name, SortName: s.SortName || s.Name }));
+
+                        availableSeries = Array.from(seriesMap.values()).sort((a, b) => {
+                            const nameA = a.SortName || a.Name || "";
+                            const nameB = b.SortName || b.Name || "";
+                            return nameA.localeCompare(nameB);
+                        });
 
                         renderSeriesDropdown(availableSeries);
                         renderOverridesTable(currentPreferences.SeriesOverrides || []);
+                        clearSeriesForm();
+
+                        const selectedUserObj = availableUsers.find(u => u.Id === userId);
+                        const userNameDisplay = selectedUserObj ? selectedUserObj.Name : (currentPreferences.Username || "Benutzer");
+                        document.querySelector("#lblOverridesTitle").textContent = "Aktive Serien-Ausnahmen für " + userNameDisplay;
 
                         if (currentPreferences.IsAdmin) {
                             document.querySelector("#adminSection").style.display = "block";
@@ -187,12 +288,21 @@
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
                         console.error("Ladefehler:", err);
+                        Dashboard.alert("Fehler beim Laden der Einstellungen: " + err);
                     });
                 }
 
                 function renderSeriesDropdown(seriesList) {
                     const sel = document.querySelector("#selSeries");
+                    const lblCount = document.querySelector("#lblSeriesCount");
                     sel.innerHTML = '<option value="">-- Bitte Serie wählen --</option>';
+
+                    if (!seriesList || seriesList.length === 0) {
+                        lblCount.textContent = "Keine Serien in der Mediathek gefunden.";
+                        return;
+                    }
+
+                    lblCount.textContent = seriesList.length + " Serien gefunden.";
 
                     seriesList.forEach(function (s) {
                         const opt = document.createElement("option");
@@ -276,10 +386,9 @@
 
                 function loadSeriesMetadata(seriesId) {
                     const infoBox = document.querySelector("#seriesMetadataInfo");
-                    const userId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
                     infoBox.style.display = "none";
 
-                    ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}/Metadata?userId=${userId}`)).then(function (meta) {
+                    ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}/Metadata?userId=${activeUserId}`)).then(function (meta) {
                         infoBox.style.display = "block";
                         document.querySelector("#lblDetectedVersions").textContent = meta.AvailableVersions.length > 0
                             ? "Erkannte Versionen: " + meta.AvailableVersions.join(", ")
@@ -313,7 +422,7 @@
                         if (!override.AudioLanguage) {
                             selAudio.value = "";
                             divAudio.style.display = "none";
-                        } else if (["deu", "eng", "jpn", "fra", "spa"].includes(override.AudioLanguage)) {
+                        } else if (["deu", "eng", "jpn", "fra", "spa", "ita"].includes(override.AudioLanguage)) {
                             selAudio.value = override.AudioLanguage;
                             divAudio.style.display = "none";
                         } else {
@@ -379,7 +488,6 @@
                     const rawMode = document.querySelector("#selSeriesSubMode").value;
                     const subMode = rawMode === "" ? null : parseInt(rawMode, 10);
                     const version = document.querySelector("#txtSeriesVersion").value.trim();
-                    const userId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
 
                     const payload = {
                         AudioLanguage: audio || null,
@@ -390,11 +498,11 @@
 
                     ApiClient.ajax({
                         type: "POST",
-                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${sid}?userId=${userId}`),
+                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${sid}?targetUserId=${activeUserId}`),
                         data: JSON.stringify(payload),
                         contentType: "application/json"
                     }).then(function () {
-                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?userId=${userId}`));
+                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?targetUserId=${activeUserId}`));
                     }).then(function (updatedPref) {
                         currentPreferences = updatedPref;
                         renderOverridesTable(currentPreferences.SeriesOverrides || []);
@@ -408,13 +516,12 @@
 
                 function deleteOverride(seriesId) {
                     Dashboard.showLoadingMsg();
-                    const userId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
 
                     ApiClient.ajax({
                         type: "DELETE",
-                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}?userId=${userId}`)
+                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}?targetUserId=${activeUserId}`)
                     }).then(function () {
-                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?userId=${userId}`));
+                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?targetUserId=${activeUserId}`));
                     }).then(function (updatedPref) {
                         currentPreferences = updatedPref;
                         renderOverridesTable(currentPreferences.SeriesOverrides || []);
