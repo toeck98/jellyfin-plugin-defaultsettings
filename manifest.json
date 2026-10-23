@@ -19,9 +19,9 @@
         "version": "1.1.0.0",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.1.0.0/DefaultSettings.zip",
-        "checksum": "0b9c3bdee2eabe4bf80aa02918c6dc65",
-        "timestamp": "2026-10-23T21:30:00Z",
-        "changelog": "Release v1.1.0.0: Direkt-Button auf der Serien-Detailseite, Multi-Version-Auswahl und serienspezifische Overrides"
+        "checksum": "c007aa15c93d0783f059f5045c87752a",
+        "timestamp": "2026-10-23T19:38:42Z",
+        "changelog": "Release v1.1.0.0 für Jellyfin 10.9+"
       },
       {
         "version": "1.0.0.0",
