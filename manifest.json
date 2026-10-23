@@ -4,7 +4,7 @@
     "name": "DefaultSettings",
     "description": "Ermöglicht Benutzern, globale und serienspezifische Standardeinstellungen für Audio-, Untertitel- und Medienversionen festzulegen. Funktioniert nahtlos über alle Apps hinweg.",
     "overview": "Globale und serienspezifische Voreinstellungen für Audio, Untertitel und Schnittfassungen/Versionen.",
-    "owner": "DefaultSettings",
+    "owner": "toeck98",
     "category": "General",
     "versions": []
   }
