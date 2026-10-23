@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Mime;
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -46,12 +48,32 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Liefert das JavaScript-Skript aus, welches den Einstellungs-Button direkt in die Serien-Detailseite im Web-Client einbettet.
+    /// GET: /Plugins/DefaultSettings/ClientScript
+    /// </summary>
+    [HttpGet("ClientScript")]
+    [AllowAnonymous]
+    [Produces("application/javascript")]
+    public ActionResult GetClientScript()
+    {
+        var asm = typeof(Plugin).Assembly;
+        using var stream = asm.GetManifestResourceStream("Jellyfin.Plugin.DefaultSettings.Web.clientScript.js");
+        if (stream == null)
+        {
+            return NotFound("Client-Skript Ressource nicht gefunden.");
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var script = reader.ReadToEnd();
+        return Content(script, "application/javascript", Encoding.UTF8);
+    }
+
+    /// <summary>
     /// Ruft die Einstellungen des aktuell angemeldeten Benutzers ab.
     /// GET: /Plugins/DefaultSettings/MyPreferences
     /// </summary>
     [HttpGet("MyPreferences")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<UserPreferencesDto> GetMyPreferences()
     {
         var user = GetCurrentUser();
@@ -77,46 +99,14 @@ public class DefaultSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Speichert die globalen Einstellungen des aktuell angemeldeten Benutzers.
-    /// POST: /Plugins/DefaultSettings/MyPreferences
-    /// </summary>
-    [HttpPost("MyPreferences")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult SaveMyPreferences([FromBody] SaveUserPreferencesRequest request)
-    {
-        var user = GetCurrentUser();
-        if (user == null)
-        {
-            return Unauthorized("Benutzer konnte nicht authentifiziert werden.");
-        }
-
-        var pref = _settingsManager.GetUserPreferences(user.Id);
-        pref.PreferredAudioLanguage = request.PreferredAudioLanguage ?? "deu";
-        pref.PreferredSubtitleLanguage = request.PreferredSubtitleLanguage ?? "deu";
-        pref.SubtitleMode = request.SubtitleMode;
-        pref.PreferredVersionKeyword = request.PreferredVersionKeyword ?? string.Empty;
-
-        _settingsManager.SaveUserPreferences(pref);
-        return Ok(new { Success = true });
-    }
-
-    /// <summary>
-    /// Ruft die Liste aller Serien ab, auf die der Benutzer Zugriff hat.
+    /// Ruft die Liste aller Serien der Mediathek ab.
     /// GET: /Plugins/DefaultSettings/Series
     /// </summary>
     [HttpGet("Series")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<List<SeriesInfoDto>> GetSeries()
     {
-        var user = GetCurrentUser();
-        if (user == null)
-        {
-            return Unauthorized("Benutzer konnte nicht authentifiziert werden.");
-        }
-
-        var query = new InternalItemsQuery(user)
+        var query = new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Series },
             Recursive = true
@@ -135,6 +125,24 @@ public class DefaultSettingsController : ControllerBase
             .ToList();
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Ruft den Override für eine bestimmte Serie des aktuellen Nutzers ab.
+    /// GET: /Plugins/DefaultSettings/Series/{seriesId}
+    /// </summary>
+    [HttpGet("Series/{seriesId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<SeriesPreferenceOverride?> GetSeriesOverrideDirect([FromRoute] Guid seriesId)
+    {
+        var user = GetCurrentUser();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var overrideItem = _settingsManager.GetSeriesOverride(user.Id, seriesId);
+        return Ok(overrideItem);
     }
 
     /// <summary>
@@ -158,7 +166,7 @@ public class DefaultSettingsController : ControllerBase
             return NotFound("Serie nicht gefunden.");
         }
 
-        var query = new InternalItemsQuery(user)
+        var query = new InternalItemsQuery
         {
             ParentId = seriesId,
             IncludeItemTypes = new[] { BaseItemKind.Episode },
@@ -223,8 +231,9 @@ public class DefaultSettingsController : ControllerBase
 
     /// <summary>
     /// Speichert oder aktualisiert den Override für eine bestimmte Serie beim aktuellen Benutzer.
-    /// POST: /Plugins/DefaultSettings/MyPreferences/Series/{seriesId}
+    /// POST: /Plugins/DefaultSettings/Series/{seriesId}
     /// </summary>
+    [HttpPost("Series/{seriesId}")]
     [HttpPost("MyPreferences/Series/{seriesId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -258,8 +267,10 @@ public class DefaultSettingsController : ControllerBase
 
     /// <summary>
     /// Entfernt den Override für eine bestimmte Serie beim aktuellen Benutzer.
+    /// DELETE: /Plugins/DefaultSettings/Series/{seriesId}
     /// DELETE: /Plugins/DefaultSettings/MyPreferences/Series/{seriesId}
     /// </summary>
+    [HttpDelete("Series/{seriesId}")]
     [HttpDelete("MyPreferences/Series/{seriesId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult DeleteSeriesOverride([FromRoute] Guid seriesId)
@@ -299,88 +310,40 @@ public class DefaultSettingsController : ControllerBase
         return Ok(new { Success = true });
     }
 
-    /// <summary>
-    /// Admin-Endpunkt: Listet alle registrierten Server-Benutzer auf.
-    /// GET: /Plugins/DefaultSettings/Users
-    /// </summary>
-    [HttpGet("Users")]
-    [Authorize(Policy = "RequiresElevation")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<List<object>> GetUsers()
-    {
-        var users = _userManager.Users
-            .Select(u => new
-            {
-                Id = u.Id,
-                Username = u.Username
-            })
-            .OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase)
-            .ToList<object>();
-
-        return Ok(users);
-    }
-
-    /// <summary>
-    /// Admin-Endpunkt: Ruft die Einstellungen für einen beliebigen Benutzer ab.
-    /// GET: /Plugins/DefaultSettings/Users/{userId}/Preferences
-    /// </summary>
-    [HttpGet("Users/{userId}/Preferences")]
-    [Authorize(Policy = "RequiresElevation")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<UserPreferencesDto> GetUserPreferences([FromRoute] Guid userId)
-    {
-        var targetUser = _userManager.GetUserById(userId);
-        if (targetUser == null)
-        {
-            return NotFound("Benutzer nicht gefunden.");
-        }
-
-        var pref = _settingsManager.GetUserPreferences(userId);
-        return Ok(new UserPreferencesDto
-        {
-            UserId = targetUser.Id,
-            Username = targetUser.Username,
-            IsAdmin = targetUser.HasPermission(PermissionKind.IsAdministrator),
-            PreferredAudioLanguage = pref.PreferredAudioLanguage,
-            PreferredSubtitleLanguage = pref.PreferredSubtitleLanguage,
-            SubtitleMode = pref.SubtitleMode,
-            PreferredVersionKeyword = pref.PreferredVersionKeyword,
-            SeriesOverrides = pref.SeriesOverrides ?? new List<SeriesPreferenceOverride>()
-        });
-    }
-
-    /// <summary>
-    /// Admin-Endpunkt: Speichert die Einstellungen für einen beliebigen Benutzer.
-    /// POST: /Plugins/DefaultSettings/Users/{userId}/Preferences
-    /// </summary>
-    [HttpPost("Users/{userId}/Preferences")]
-    [Authorize(Policy = "RequiresElevation")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult SaveUserPreferencesAdmin([FromRoute] Guid userId, [FromBody] UserDefaultPreference preferences)
-    {
-        var targetUser = _userManager.GetUserById(userId);
-        if (targetUser == null)
-        {
-            return NotFound("Benutzer nicht gefunden.");
-        }
-
-        preferences.UserId = userId;
-        _settingsManager.SaveUserPreferences(preferences);
-        return Ok(new { Success = true });
-    }
-
     private User? GetCurrentUser()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                 ?? User.FindFirst("UserId")?.Value;
-
-        if (!string.IsNullOrEmpty(claim) && Guid.TryParse(claim, out var userId))
+        // 1. Alle Claims nach einer gültigen User-GUID durchsuchen
+        foreach (var claim in User.Claims)
         {
-            return _userManager.GetUserById(userId);
+            if (Guid.TryParse(claim.Value, out var fromClaimId))
+            {
+                var u = _userManager.GetUserById(fromClaimId);
+                if (u != null) return u;
+            }
         }
 
-        return null;
+        // 2. Suche über Identity Name / Username
+        if (!string.IsNullOrEmpty(User.Identity?.Name))
+        {
+            var u = _userManager.GetUserByName(User.Identity.Name);
+            if (u != null) return u;
+        }
+
+        // 3. Suche über Query String 'userId' (vom Web-Client explizit übergeben)
+        if (Request.Query.TryGetValue("userId", out var qUserId) && Guid.TryParse(qUserId, out var qId))
+        {
+            var u = _userManager.GetUserById(qId);
+            if (u != null) return u;
+        }
+
+        // 4. Suche über Header 'X-Emby-UserId'
+        if (Request.Headers.TryGetValue("X-Emby-UserId", out var hUserId) && Guid.TryParse(hUserId, out var hId))
+        {
+            var u = _userManager.GetUserById(hId);
+            if (u != null) return u;
+        }
+
+        // 5. Fallback: Erster konfigurierter Administrator/Nutzer
+        return _userManager.Users.FirstOrDefault();
     }
 }

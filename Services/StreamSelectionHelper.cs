@@ -8,7 +8,7 @@ using Jellyfin.Plugin.DefaultSettings.Configuration;
 namespace Jellyfin.Plugin.DefaultSettings.Services;
 
 /// <summary>
-/// Logik zur Berechnung und Anwendung von Sprach-, Untertitel- und Versions-Voreinstellungen auf MediaSources.
+/// Logik zur Berechnung und Anwendung von Versionen, Ton- und Untertitel-Voreinstellungen auf MediaSources.
 /// </summary>
 public static class StreamSelectionHelper
 {
@@ -17,10 +17,16 @@ public static class StreamSelectionHelper
     /// </summary>
     public static void ApplyPreferences(
         IList<MediaSourceInfo> mediaSources,
-        UserDefaultPreference userPref,
+        UserDefaultPreference? userPref,
         SeriesPreferenceOverride? seriesOverride)
     {
         if (mediaSources == null || mediaSources.Count == 0)
+        {
+            return;
+        }
+
+        // Wenn weder ein Serien-Override noch ein Versions-Keyword existiert: Native Jellyfin-Auswahl unverändert lassen!
+        if (seriesOverride == null && string.IsNullOrWhiteSpace(userPref?.PreferredVersionKeyword))
         {
             return;
         }
@@ -29,7 +35,7 @@ public static class StreamSelectionHelper
         var preferredVersion = seriesOverride?.PreferredVersion;
         if (string.IsNullOrWhiteSpace(preferredVersion))
         {
-            preferredVersion = userPref.PreferredVersionKeyword;
+            preferredVersion = userPref?.PreferredVersionKeyword;
         }
 
         if (!string.IsNullOrWhiteSpace(preferredVersion) && mediaSources.Count > 1)
@@ -48,7 +54,7 @@ public static class StreamSelectionHelper
                 }
             }
 
-            // Wenn die Version gefunden wurde und nicht bereits an Index 0 liegt: nach vorne ziehen
+            // Wenn die Wunschversion gefunden wurde und nicht bereits an Index 0 liegt: nach vorne ziehen
             if (matchIndex > 0)
             {
                 var matchedSource = mediaSources[matchIndex];
@@ -58,22 +64,17 @@ public static class StreamSelectionHelper
             // Falls Wunschversion bei dieser Folge nicht vorhanden: Jellyfin Standard beibehalten
         }
 
-        // 2. Audio- und Untertitel-Spuren für alle verfügbaren Quellen konfigurieren (primär Index 0)
+        // 2. Audio- und Untertitel-Spuren konfigurieren (nur wenn für diese Serie explizit überschrieben)
         var targetAudioLang = seriesOverride?.AudioLanguage;
-        if (string.IsNullOrWhiteSpace(targetAudioLang))
-        {
-            targetAudioLang = userPref.PreferredAudioLanguage;
-        }
-
         var targetSubLang = seriesOverride?.SubtitleLanguage;
-        if (string.IsNullOrWhiteSpace(targetSubLang))
+        var subMode = seriesOverride?.SubtitleMode;
+
+        // Falls für diese Serie weder Audio noch Untertitel überschrieben wurden: Streams unangetastet lassen
+        if (string.IsNullOrWhiteSpace(targetAudioLang) && string.IsNullOrWhiteSpace(targetSubLang) && !subMode.HasValue)
         {
-            targetSubLang = userPref.PreferredSubtitleLanguage;
+            return;
         }
 
-        var subMode = seriesOverride?.SubtitleMode ?? userPref.SubtitleMode;
-
-        // Wir wenden die Logik auf jede MediaSource an, damit auch bei manuellem Versionswechsel im Client die Spuren passen
         foreach (var source in mediaSources)
         {
             ApplyStreamsToSource(source, targetAudioLang, targetSubLang, subMode);
@@ -82,9 +83,9 @@ public static class StreamSelectionHelper
 
     private static void ApplyStreamsToSource(
         MediaSourceInfo source,
-        string targetAudioLang,
-        string targetSubLang,
-        SubtitleModePreference subMode)
+        string? targetAudioLang,
+        string? targetSubLang,
+        SubtitleModePreference? subMode)
     {
         if (source.MediaStreams == null || source.MediaStreams.Count == 0)
         {
@@ -94,79 +95,74 @@ public static class StreamSelectionHelper
         var audioStreams = source.MediaStreams.Where(s => s.Type == MediaStreamType.Audio).ToList();
         var subStreams = source.MediaStreams.Where(s => s.Type == MediaStreamType.Subtitle).ToList();
 
-        // --- Audio Stream Auswahl ---
+        // --- Audio Stream Auswahl (nur wenn targetAudioLang angegeben ist) ---
         MediaStream? chosenAudio = null;
         if (!string.IsNullOrWhiteSpace(targetAudioLang) && audioStreams.Count > 0)
         {
-            // 1. Bevorzuge Spur mit passender Sprache, die bereits IsDefault ist
-            chosenAudio = audioStreams.FirstOrDefault(s => MatchesLanguage(s, targetAudioLang) && s.IsDefault);
+            chosenAudio = audioStreams.FirstOrDefault(s => MatchesLanguage(s, targetAudioLang) && s.IsDefault)
+                       ?? audioStreams.Where(s => MatchesLanguage(s, targetAudioLang))
+                                      .OrderByDescending(s => s.Channels ?? 2)
+                                      .FirstOrDefault();
 
-            // 2. Beliebige Spur mit passender Sprache
-            chosenAudio ??= audioStreams
-                .Where(s => MatchesLanguage(s, targetAudioLang))
-                .OrderByDescending(s => s.Channels ?? 2)
-                .FirstOrDefault();
-        }
-
-        if (chosenAudio != null)
-        {
-            source.DefaultAudioStreamIndex = chosenAudio.Index;
-            foreach (var a in audioStreams)
+            if (chosenAudio != null)
             {
-                a.IsDefault = (a.Index == chosenAudio.Index);
-            }
-        }
-        else
-        {
-            // Wenn kein Match vorhanden ist: Behalte bestehende Container-Standardspur bei
-            var existingDefault = audioStreams.FirstOrDefault(a => a.IsDefault) ?? audioStreams.FirstOrDefault();
-            if (existingDefault != null)
-            {
-                chosenAudio = existingDefault;
+                source.DefaultAudioStreamIndex = chosenAudio.Index;
+                foreach (var a in audioStreams)
+                {
+                    a.IsDefault = (a.Index == chosenAudio.Index);
+                }
             }
         }
 
-        // --- Untertitel Stream Auswahl ---
-        int chosenSubIndex = -1;
+        // Falls keine passende Audiospur gefunden oder keine Zielsprache definiert: Aktiven Container-Standard ermitteln
+        chosenAudio ??= audioStreams.FirstOrDefault(a => a.IsDefault) ?? audioStreams.FirstOrDefault();
 
-        if (subMode == SubtitleModePreference.None || subStreams.Count == 0)
+        // --- Untertitel Stream Auswahl (nur wenn SubtitleLanguage oder SubtitleMode gesetzt sind) ---
+        if (subMode.HasValue || !string.IsNullOrWhiteSpace(targetSubLang))
         {
-            chosenSubIndex = -1;
-        }
-        else if (subMode == SubtitleModePreference.OnlyForced)
-        {
-            var forced = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && s.IsForced);
-            chosenSubIndex = forced?.Index ?? -1;
-        }
-        else if (subMode == SubtitleModePreference.Always)
-        {
-            var regular = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && !s.IsForced)
-                       ?? subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang));
-            chosenSubIndex = regular?.Index ?? -1;
-        }
-        else if (subMode == SubtitleModePreference.Smart)
-        {
-            // Smart: Wenn gewählte Audiospur fremdsprachig ist -> vollständige Untertitel
-            // Wenn gewählte Audiospur bereits die Zielsprache ist -> nur Forced (falls vorhanden), sonst keine
-            bool isForeignAudio = chosenAudio != null && !MatchesLanguage(chosenAudio, targetAudioLang);
+            var effectiveMode = subMode ?? SubtitleModePreference.OnlyForced;
+            int chosenSubIndex = -1;
 
-            if (isForeignAudio)
+            if (effectiveMode == SubtitleModePreference.None || subStreams.Count == 0)
             {
-                var regular = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && !s.IsForced)
-                           ?? subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang));
-                chosenSubIndex = regular?.Index ?? -1;
+                chosenSubIndex = -1;
             }
-            else
+            else if (!string.IsNullOrWhiteSpace(targetSubLang))
             {
-                var forced = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && s.IsForced);
-                chosenSubIndex = forced?.Index ?? -1;
-            }
-        }
+                if (effectiveMode == SubtitleModePreference.OnlyForced)
+                {
+                    var forced = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && s.IsForced);
+                    chosenSubIndex = forced?.Index ?? -1;
+                }
+                else if (effectiveMode == SubtitleModePreference.Always)
+                {
+                    var regular = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && !s.IsForced)
+                               ?? subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang));
+                    chosenSubIndex = regular?.Index ?? -1;
+                }
+                else if (effectiveMode == SubtitleModePreference.Smart)
+                {
+                    bool isForeignAudio = chosenAudio != null && !string.IsNullOrWhiteSpace(targetAudioLang) && !MatchesLanguage(chosenAudio, targetAudioLang);
 
-        source.DefaultSubtitleStreamIndex = chosenSubIndex;
-        foreach (var s in subStreams)
-        {
-            s.IsDefault = (s.Index == chosenSubIndex);
+                    if (isForeignAudio)
+                    {
+                        var regular = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && !s.IsForced)
+                                   ?? subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang));
+                        chosenSubIndex = regular?.Index ?? -1;
+                    }
+                    else
+                    {
+                        var forced = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && s.IsForced);
+                        chosenSubIndex = forced?.Index ?? -1;
+                    }
+                }
+            }
+
+            source.DefaultSubtitleStreamIndex = chosenSubIndex;
+            foreach (var s in subStreams)
+            {
+                s.IsDefault = (s.Index == chosenSubIndex);
+            }
         }
     }
 
@@ -174,7 +170,6 @@ public static class StreamSelectionHelper
     {
         if (string.IsNullOrWhiteSpace(stream.Language))
         {
-            // Manche Dateien haben Titel wie "German" oder "Deutsch", aber keinen Language-Tag
             if (!string.IsNullOrWhiteSpace(stream.Title) && LanguageCodeHelper.AreEquivalent(stream.Title, targetLang))
             {
                 return true;

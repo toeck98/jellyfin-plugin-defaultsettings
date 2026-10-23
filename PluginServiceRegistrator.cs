@@ -25,5 +25,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         {
             options.Filters.Add<PlaybackResultFilter>();
         });
+
+        // 4. StartupFilter für die automatische Injektion des Client-Skripts in index.html
+        serviceCollection.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, WebInjectionStartupFilter>();
     }
 }

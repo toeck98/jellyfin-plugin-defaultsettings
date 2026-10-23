@@ -19,14 +19,13 @@ public class StreamSelectionHelperTests
             new MediaSourceInfo { Id = "2", Name = "1080p Bunt", MediaStreams = new List<MediaStream>() }
         };
 
-        var userPref = new UserDefaultPreference();
         var seriesOverride = new SeriesPreferenceOverride
         {
             PreferredVersion = "Bunt"
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, seriesOverride);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert
         Assert.Equal("2", sources[0].Id);
@@ -42,14 +41,13 @@ public class StreamSelectionHelperTests
             new MediaSourceInfo { Id = "1", Name = "1080p Schwarzweiss", MediaStreams = new List<MediaStream>() }
         };
 
-        var userPref = new UserDefaultPreference();
         var seriesOverride = new SeriesPreferenceOverride
         {
             PreferredVersion = "Bunt"
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, seriesOverride);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert: Unchanged order, no exception
         Assert.Single(sources);
@@ -75,13 +73,13 @@ public class StreamSelectionHelperTests
             }
         };
 
-        var userPref = new UserDefaultPreference
+        var seriesOverride = new SeriesPreferenceOverride
         {
-            PreferredAudioLanguage = "deu"
+            AudioLanguage = "deu"
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, null);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert: Audio stream index 2 (deu) must be selected
         Assert.Equal(2, sources[0].DefaultAudioStreamIndex);
@@ -106,13 +104,13 @@ public class StreamSelectionHelperTests
             }
         };
 
-        var userPref = new UserDefaultPreference
+        var seriesOverride = new SeriesPreferenceOverride
         {
-            PreferredAudioLanguage = "jpn"
+            AudioLanguage = "jpn"
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, null);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert: Container default (index 1) remains selected!
         Assert.Equal(1, sources[0].DefaultAudioStreamIndex);
@@ -136,15 +134,14 @@ public class StreamSelectionHelperTests
             }
         };
 
-        var userPref = new UserDefaultPreference
+        var seriesOverride = new SeriesPreferenceOverride
         {
-            PreferredAudioLanguage = "deu",
-            PreferredSubtitleLanguage = "deu",
+            SubtitleLanguage = "deu",
             SubtitleMode = SubtitleModePreference.OnlyForced
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, null);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert: Index 3 (IsForced = true) is selected
         Assert.Equal(3, sources[0].DefaultSubtitleStreamIndex);
@@ -167,14 +164,14 @@ public class StreamSelectionHelperTests
             }
         };
 
-        var userPref = new UserDefaultPreference
+        var seriesOverride = new SeriesPreferenceOverride
         {
-            PreferredSubtitleLanguage = "deu",
+            SubtitleLanguage = "deu",
             SubtitleMode = SubtitleModePreference.OnlyForced
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, null);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
         // Assert: Disabled (-1) because no forced subtitle is present
         Assert.Equal(-1, sources[0].DefaultSubtitleStreamIndex);
@@ -183,7 +180,7 @@ public class StreamSelectionHelperTests
     [Fact]
     public void SubtitleSelection_SmartMode_ActivatesFullSub_WhenForeignAudio()
     {
-        // Arrange: Anime with Japanese audio, user wants German
+        // Arrange: Anime with Japanese audio, series override wants German audio + smart sub
         var sources = new List<MediaSourceInfo>
         {
             new MediaSourceInfo
@@ -198,22 +195,22 @@ public class StreamSelectionHelperTests
             }
         };
 
-        var userPref = new UserDefaultPreference
+        var seriesOverride = new SeriesPreferenceOverride
         {
-            PreferredAudioLanguage = "deu",
-            PreferredSubtitleLanguage = "deu",
+            AudioLanguage = "deu",
+            SubtitleLanguage = "deu",
             SubtitleMode = SubtitleModePreference.Smart
         };
 
         // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, null);
+        StreamSelectionHelper.ApplyPreferences(sources, null, seriesOverride);
 
-        // Assert: Because audio is Japanese, full subtitle (index 2, not forced) is chosen!
+        // Assert: Because audio is Japanese (foreign to target deu), full subtitle (index 2) is chosen!
         Assert.Equal(2, sources[0].DefaultSubtitleStreamIndex);
     }
 
     [Fact]
-    public void SeriesOverride_TakesPrecedenceOverGlobalPreferences()
+    public void NoOverride_LeavesJellyfinDefaultsUntouched()
     {
         // Arrange
         var sources = new List<MediaSourceInfo>
@@ -221,35 +218,17 @@ public class StreamSelectionHelperTests
             new MediaSourceInfo
             {
                 Id = "1",
-                MediaStreams = new List<MediaStream>
-                {
-                    new MediaStream { Index = 1, Type = MediaStreamType.Audio, Language = "deu" },
-                    new MediaStream { Index = 2, Type = MediaStreamType.Audio, Language = "jpn" },
-                    new MediaStream { Index = 3, Type = MediaStreamType.Subtitle, Language = "deu", IsForced = false }
-                }
+                DefaultAudioStreamIndex = 5,
+                DefaultSubtitleStreamIndex = 10,
+                MediaStreams = new List<MediaStream>()
             }
         };
 
-        // User global is German audio, no sub
-        var userPref = new UserDefaultPreference
-        {
-            PreferredAudioLanguage = "deu",
-            SubtitleMode = SubtitleModePreference.None
-        };
+        // Act: No override configured
+        StreamSelectionHelper.ApplyPreferences(sources, null, null);
 
-        // Series override is Japanese audio + German full subs
-        var seriesOverride = new SeriesPreferenceOverride
-        {
-            AudioLanguage = "jpn",
-            SubtitleLanguage = "deu",
-            SubtitleMode = SubtitleModePreference.Always
-        };
-
-        // Act
-        StreamSelectionHelper.ApplyPreferences(sources, userPref, seriesOverride);
-
-        // Assert: Japanese audio and German subtitles active
-        Assert.Equal(2, sources[0].DefaultAudioStreamIndex);
-        Assert.Equal(3, sources[0].DefaultSubtitleStreamIndex);
+        // Assert: Indices must remain completely untouched!
+        Assert.Equal(5, sources[0].DefaultAudioStreamIndex);
+        Assert.Equal(10, sources[0].DefaultSubtitleStreamIndex);
     }
 }
