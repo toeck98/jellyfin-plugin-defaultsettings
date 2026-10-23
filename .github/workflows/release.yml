@@ -1,0 +1,111 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versionsnummer (z. B. 1.0.0.0)'
+        required: true
+        default: '1.0.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: .NET 8 einrichten
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Versionsnummer ermitteln
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Bauen für Version: $VERSION"
+
+      - name: Plugin kompilieren (Release)
+        run: |
+          dotnet build DefaultSettings.csproj -c Release /p:Version=${{ steps.get_version.outputs.VERSION }}
+
+      - name: ZIP-Paket erstellen
+        id: package
+        run: |
+          mkdir -p artifacts
+          cd bin/Release/net8.0/
+          zip -j ../../../artifacts/DefaultSettings.zip Jellyfin.Plugin.DefaultSettings.dll
+          cd ../../../
+          
+          # MD5 Prüfsumme berechnen
+          CHECKSUM=$(md5sum artifacts/DefaultSettings.zip | cut -d ' ' -f 1)
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
+          echo "MD5 Checksum: $CHECKSUM"
+
+      - name: manifest.json aktualisieren
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          CHECKSUM="${{ steps.package.outputs.CHECKSUM }}"
+          REPO="${{ github.repository }}"
+          OWNER="${{ github.repository_owner }}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          cat <<EOF > manifest.json
+          [
+            {
+              "guid": "2ff22cec-2c92-4428-a1b3-d1ff33748bf2",
+              "name": "DefaultSettings",
+              "description": "Ermöglicht Benutzern, globale und serienspezifische Standardeinstellungen für Audio-, Untertitel- und Medienversionen festzulegen. Funktioniert nahtlos über alle Apps hinweg.",
+              "overview": "Globale und serienspezifische Voreinstellungen für Audio, Untertitel und Schnittfassungen/Versionen.",
+              "owner": "${OWNER}",
+              "category": "General",
+              "versions": [
+                {
+                  "version": "${VERSION}",
+                  "targetAbi": "10.9.0.0",
+                  "sourceUrl": "https://github.com/${REPO}/releases/download/v${VERSION}/DefaultSettings.zip",
+                  "checksum": "${CHECKSUM}",
+                  "timestamp": "${DATE}",
+                  "changelog": "Release v${VERSION} für Jellyfin 10.9+"
+                }
+              ]
+            }
+          ]
+          EOF
+          cat manifest.json
+
+      - name: GitHub Release erstellen & ZIP hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: DefaultSettings v${{ steps.get_version.outputs.VERSION }}
+          files: |
+            artifacts/DefaultSettings.zip
+            manifest.json
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Aktualisiertes manifest.json in main commiten
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "chore: update manifest.json for v${{ steps.get_version.outputs.VERSION }} [skip ci]" || echo "Keine Änderungen zum Committen."
+          git push origin HEAD:main || echo "Push auf main übersprungen (falls geschützt oder Tag-Build)."
