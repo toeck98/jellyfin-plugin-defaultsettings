@@ -2,10 +2,19 @@
   {
     "guid": "2ff22cec-2c92-4428-a1b3-d1ff33748bf2",
     "name": "DefaultSettings",
-    "description": "Ermöglicht Benutzern, globale und serienspezifische Standardeinstellungen für Audio-, Untertitel- und Medienversionen festzulegen. Funktioniert nahtlos über alle Apps hinweg.",
-    "overview": "Globale und serienspezifische Voreinstellungen für Audio, Untertitel und Schnittfassungen/Versionen.",
+    "description": "Ermöglicht Benutzern, benutzerdefinierte Standardeinstellungen für Medienversionen (z. B. Bunt vs. Schwarz/Weiß) und serienspezifische Ton- und Untertitelspuren festzulegen. Verfügt über einen Button direkt auf der Serien-Detailseite im Web und wirkt nahtlos über alle Jellyfin-Apps hinweg.",
+    "overview": "Serienspezifische Voreinstellungen für Medienversionen und Tonspuren mit Direktbutton auf der Serienseite.",
     "owner": "toeck98",
     "category": "General",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.1.0.0",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.1.0.0/DefaultSettings.zip",
+        "checksum": "0b9c3bdee2eabe4bf80aa02918c6dc65",
+        "timestamp": "2026-10-23T21:30:00Z",
+        "changelog": "Release v1.1.0.0: Direkt-Button auf der Serien-Detailseite, Multi-Version-Auswahl und serienspezifische Overrides"
+      }
+    ]
   }
 ]

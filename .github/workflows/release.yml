@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versionsnummer (z. B. 1.0.0.0)'
+        description: 'Versionsnummer (z. B. 1.1.0.0)'
         required: true
-        default: '1.0.0.0'
+        default: '1.1.0.0'
 
 permissions:
   contents: write
@@ -57,7 +57,19 @@ jobs:
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
           echo "MD5 Checksum: $CHECKSUM"
 
-      - name: manifest.json aktualisieren
+      - name: GitHub Release erstellen & ZIP hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: DefaultSettings v${{ steps.get_version.outputs.VERSION }}
+          files: |
+            artifacts/DefaultSettings.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Feste manifest.json auf main aktualisieren
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           CHECKSUM="${{ steps.package.outputs.CHECKSUM }}"
@@ -65,13 +77,22 @@ jobs:
           OWNER="${{ github.repository_owner }}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Sicherstellen, dass wir auf dem main-Branch sind
+          git fetch origin main
+          git checkout main
+          git pull origin main --rebase
+
+          # manifest.json mit neuer Version aktualisieren
           cat <<EOF > manifest.json
           [
             {
               "guid": "2ff22cec-2c92-4428-a1b3-d1ff33748bf2",
               "name": "DefaultSettings",
-              "description": "Ermöglicht Benutzern, globale und serienspezifische Standardeinstellungen für Audio-, Untertitel- und Medienversionen festzulegen. Funktioniert nahtlos über alle Apps hinweg.",
-              "overview": "Globale und serienspezifische Voreinstellungen für Audio, Untertitel und Schnittfassungen/Versionen.",
+              "description": "Ermöglicht Benutzern, benutzerdefinierte Standardeinstellungen für Medienversionen (z. B. Bunt vs. Schwarz/Weiß) und serienspezifische Ton- und Untertitelspuren festzulegen. Verfügt über einen Button direkt auf der Serien-Detailseite im Web und wirkt nahtlos über alle Jellyfin-Apps hinweg.",
+              "overview": "Serienspezifische Voreinstellungen für Medienversionen und Tonspuren mit Direktbutton auf der Serienseite.",
               "owner": "${OWNER}",
               "category": "General",
               "versions": [
@@ -87,25 +108,7 @@ jobs:
             }
           ]
           EOF
-          cat manifest.json
 
-      - name: GitHub Release erstellen & ZIP hochladen
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.get_version.outputs.VERSION }}
-          name: DefaultSettings v${{ steps.get_version.outputs.VERSION }}
-          files: |
-            artifacts/DefaultSettings.zip
-            manifest.json
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Aktualisiertes manifest.json in main commiten
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json
-          git commit -m "chore: update manifest.json for v${{ steps.get_version.outputs.VERSION }} [skip ci]" || echo "Keine Änderungen zum Committen."
-          git push origin HEAD:main || echo "Push auf main übersprungen (falls geschützt oder Tag-Build)."
+          git commit -m "chore: update manifest.json to v${VERSION} [skip ci]" || echo "Keine Änderungen zum Committen."
+          git push origin main || echo "Push auf main abgeschlossen."

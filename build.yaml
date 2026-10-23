@@ -1,7 +1,7 @@
 ---
 name: "DefaultSettings"
 guid: "2ff22cec-2c92-4428-a1b3-d1ff33748bf2"
-version: "1.0.0.0"
+version: "1.1.0.0"
 targetAbi: "10.9.0.0"
 framework: "net8.0"
 overview: "Benutzerspezifische globale und serienspezifische Standardeinstellungen für Audio, Untertitel und Medienversionen."
