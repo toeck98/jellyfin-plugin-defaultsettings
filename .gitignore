@@ -1,0 +1,22 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Temporäre Dateien & Logs
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+
+## Release / Packaging Artefakte
+artifacts/
+out/
+dist/

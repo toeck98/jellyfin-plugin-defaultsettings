@@ -1,0 +1,10 @@
+---
+name: "DefaultSettings"
+guid: "2ff22cec-2c92-4428-a1b3-d1ff33748bf2"
+version: "1.0.0.0"
+targetAbi: "10.9.0.0"
+framework: "net8.0"
+overview: "Benutzerspezifische globale und serienspezifische Standardeinstellungen für Audio, Untertitel und Medienversionen."
+description: "Ermöglicht Benutzern, globale Voreinstellungen für Audio- und Untertitelsprachen (inkl. Forced-Modus) zu definieren, diese pro Serie zu überschreiben und bei Serien mit mehreren Versionen (z.B. Bunt vs. Schwarz/Weiß) einen Standard pro Serie festzulegen. Funktioniert nahtlos über alle Apps hinweg."
+category: "General"
+owner: "DefaultSettings"
