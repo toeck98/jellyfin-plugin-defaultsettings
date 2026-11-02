@@ -8,18 +8,20 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.3.1.0",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.3.1.0/DefaultSettings.zip",
+        "checksum": "4f80ffb41af573693d142cc3e91e544b",
+        "timestamp": "2026-11-02T21:02:00Z",
+        "changelog": "Release v1.3.1.0: Integration in das '...'-Kontextmenü für Serien, Staffeln und Episoden, robusteres Skript-Injection und Bereinigung der Anzeigeelemente"
+      },
+      {
         "version": "1.3.0.0",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/toeck98/jellyfin-plugin-defaultsettings/releases/download/v1.3.0.0/DefaultSettings.zip",
-<<<<<<< HEAD
         "checksum": "8bba3ebf95d0aec0ffacb686fe1ec953",
         "timestamp": "2026-11-02T21:00:00Z",
-        "changelog": "Release v1.3.0.0: Integration in das '...'-Kontextmenü für Serien, Staffeln und Episoden, robusteres Skript-Injection und Bereinigung der Anzeigeelemente"
-=======
-        "checksum": "bb1e0f085afbe28a5ddaf7a58ec6bb80",
-        "timestamp": "2026-11-02T15:09:36Z",
-        "changelog": "Release v1.3.0.0: Upgrade für Jellyfin 12.4 (.NET 10), Fehlerbehebung der GUI-Ladefehler und Entkopplung von EF Core"
->>>>>>> fd54f911104deb784680a57980ad802b10d1322b
+        "changelog": "Release v1.3.0.0: Upgrade auf Jellyfin 12.4 (.NET 10), Behebung des GUI-Ladefehlers [object Response], Entkopplung von EF Core Entities und resilienter nativer Config-Fallback"
       },
       {
         "version": "1.2.0.0",
