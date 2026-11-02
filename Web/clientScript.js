@@ -1,9 +1,17 @@
-// DefaultSettings Client-Skript zur Einbettung des Einstellungs-Buttons auf der Serien-Detailseite
+// DefaultSettings Client-Skript zur Einbettung der Einstellungsoption in Jellyfins Kontextmenü ("..." Menü)
 (function () {
     'use strict';
 
+    if (window.__defaultSettingsInitialized) {
+        return;
+    }
+    window.__defaultSettingsInitialized = true;
+
     const pluginId = "2ff22cec-2c92-4428-a1b3-d1ff33748bf2";
-    console.log('[DefaultSettings] Client-Skript erfolgreich initialisiert.');
+    console.log('[DefaultSettings] Client-Skript für Kontextmenü erfolgreich initialisiert.');
+
+    const itemCache = new Map();
+    let lastClickedItemId = null;
 
     function normalizeId(id) {
         if (!id) return '';
@@ -34,19 +42,60 @@
         return null;
     }
 
-    function isDetailPage() {
-        const hash = (window.location.hash || '').toLowerCase();
-        const href = (window.location.href || '').toLowerCase();
-        return hash.includes('details') || hash.includes('item') || href.includes('id=');
-    }
+    // Erfasse das zuletzt per Klick oder Kontextmenü ausgewählte Element
+    document.addEventListener('click', function (e) {
+        const trigger = e.target.closest('[data-id], [data-itemid], .card, .btnMoreCommands, .cardOverlayButton, button');
+        if (trigger) {
+            const id = trigger.getAttribute('data-id')
+                    || trigger.getAttribute('data-itemid')
+                    || trigger.closest('[data-id]')?.getAttribute('data-id')
+                    || trigger.closest('[data-itemid]')?.getAttribute('data-itemid');
 
-    function checkAndInjectButton() {
-        if (!isDetailPage()) {
-            return;
+            if (id) {
+                lastClickedItemId = id;
+            }
         }
+    }, true);
 
-        const itemId = getActiveItemId();
-        if (!itemId) {
+    document.addEventListener('contextmenu', function (e) {
+        const trigger = e.target.closest('[data-id], [data-itemid], .card, .listItem');
+        if (trigger) {
+            const id = trigger.getAttribute('data-id')
+                    || trigger.getAttribute('data-itemid')
+                    || trigger.closest('[data-id]')?.getAttribute('data-id');
+
+            if (id) {
+                lastClickedItemId = id;
+            }
+        }
+    }, true);
+
+    // MutationObserver zur Erkennung von Jellyfins Popup-Aktionsmenü (.actionSheetScroller / .actionSheet)
+    const observer = new MutationObserver(function (mutations) {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (node.classList && (node.classList.contains('actionSheet') || node.classList.contains('actionSheetScroller'))) {
+                        injectContextMenuItem(node);
+                    } else if (node.querySelector) {
+                        const scroller = node.querySelector('.actionSheetScroller');
+                        if (scroller) {
+                            injectContextMenuItem(scroller);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    function injectContextMenuItem(container) {
+        const scroller = container.classList.contains('actionSheetScroller')
+            ? container
+            : container.querySelector('.actionSheetScroller');
+
+        if (!scroller || scroller.querySelector('#dsContextMenuItem')) {
             return;
         }
 
@@ -59,58 +108,92 @@
             return;
         }
 
-        // Suche den aktiven (sichtbaren) Container der Detailseite
-        const activePage = document.querySelector('div#itemDetailPage:not(.hide), .detailPageWrapperContainer:not(.hide), .pageContainer:not(.hide), .page:not(.hide)') || document;
-
-        // Falls auf der aktiven Seite bereits ein Button für diese Item-ID existiert
-        if (activePage.querySelector('#btnDefaultSettings[data-itemid="' + itemId + '"]')) {
+        // Ermittle die betroffene Item-ID: Entweder zuletzt angeklickt oder die aktive Detailseite
+        const targetId = lastClickedItemId || getActiveItemId();
+        if (!targetId) {
             return;
         }
 
-        // Container für Buttons auf der aktiven Seite suchen
-        const btnContainer = activePage.querySelector('.mainDetailButtons') 
-            || activePage.querySelector('.detailButtons')
-            || activePage.querySelector('.detailRibbon')
-            || activePage.querySelector('.detailPagePrimaryContainer')
-            || document.querySelector('.mainDetailButtons:not(.hide)');
-
-        if (!btnContainer) {
-            return;
-        }
-
-        // Prüfen, ob es sich wirklich um eine Serie handelt
-        ApiClient.getItem(currentUserId, itemId).then(function (item) {
-            if (!item || item.Type !== 'Series') {
+        resolveSeriesItem(currentUserId, targetId).then(function (series) {
+            if (!series) {
                 return;
             }
 
-            // Altes Element auf dieser Seite entfernen
-            const oldBtn = activePage.querySelector('#btnDefaultSettings');
-            if (oldBtn) oldBtn.remove();
+            if (scroller.querySelector('#dsContextMenuItem')) {
+                return;
+            }
 
-            const btn = document.createElement('button');
-            btn.id = 'btnDefaultSettings';
-            btn.setAttribute('data-itemid', itemId);
-            btn.setAttribute('is', 'emby-button');
-            btn.type = 'button';
-            btn.className = 'emby-button detailButton raised button-flat';
-            btn.style.margin = '0.5em 0.5em 0.5em 0';
-            btn.style.display = 'inline-flex';
-            btn.style.alignItems = 'center';
-            btn.style.cursor = 'pointer';
-            btn.style.verticalAlign = 'middle';
-            btn.innerHTML = '<i class="md-icon" style="margin-right: 0.4em;">tune</i><span>Standard-Spuren / Version</span>';
+            const menuItem = document.createElement('button');
+            menuItem.id = 'dsContextMenuItem';
+            menuItem.type = 'button';
+            menuItem.className = 'actionSheetMenuItem emby-button';
+            menuItem.style.display = 'flex';
+            menuItem.style.alignItems = 'center';
+            menuItem.style.width = '100%';
+            menuItem.style.textAlign = 'left';
+            menuItem.style.cursor = 'pointer';
 
-            btn.onclick = function (e) {
+            menuItem.innerHTML = `
+                <span class="material-icons tune actionSheetMenuItemIcon" aria-hidden="true" style="margin-right: 0.8em; font-size: 1.3em;"></span>
+                <div class="actionSheetItemText">
+                    <div class="actionSheetItemText-primary">Standard-Spuren / Version</div>
+                    <div class="actionSheetItemText-secondary" style="font-size: 0.85em; opacity: 0.7;">${escapeHtml(series.Name)}</div>
+                </div>
+            `;
+
+            menuItem.addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
-                openSettingsModal(item);
-            };
 
-            btnContainer.appendChild(btn);
-            console.log('[DefaultSettings] Einstellungs-Button für Serie "' + item.Name + '" eingefügt.');
+                // Schließe das Kontextmenü
+                const actionSheet = scroller.closest('.actionSheet') || document.querySelector('.actionSheet');
+                if (actionSheet && actionSheet.parentNode) {
+                    actionSheet.parentNode.removeChild(actionSheet);
+                }
+
+                openSettingsModal(series);
+            });
+
+            // Vor den letzten Befehlen (z. B. "Löschen") oder am Ende der Liste einfügen
+            scroller.appendChild(menuItem);
         }).catch(function (err) {
-            console.debug('[DefaultSettings] Item-Prüfung:', err);
+            console.debug('[DefaultSettings] resolveSeriesItem:', err);
+        });
+    }
+
+    function resolveSeriesItem(userId, itemId) {
+        const norm = normalizeId(itemId);
+        if (itemCache.has(norm)) {
+            return Promise.resolve(itemCache.get(norm));
+        }
+
+        return ApiClient.getItem(userId, itemId).then(function (item) {
+            if (!item) return null;
+
+            if (item.Type === 'Series') {
+                itemCache.set(norm, item);
+                return item;
+            }
+
+            // Falls es eine Episode oder Season ist: Ermittle die zugehörige Serie
+            const seriesId = item.SeriesId;
+            if (seriesId) {
+                const normSeries = normalizeId(seriesId);
+                if (itemCache.has(normSeries)) {
+                    return itemCache.get(normSeries);
+                }
+
+                return ApiClient.getItem(userId, seriesId).then(function (series) {
+                    if (series && series.Type === 'Series') {
+                        itemCache.set(normSeries, series);
+                        itemCache.set(norm, series);
+                        return series;
+                    }
+                    return null;
+                });
+            }
+
+            return null;
         });
     }
 
@@ -147,38 +230,48 @@
         modalBox.style.overflowY = 'auto';
 
         modalBox.innerHTML = `
-            <h2 style="margin-top: 0; font-size: 1.4em; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5em;">
-                ⚙️ Standardeinstellungen für:<br>
-                <span style="color: #00a4dc; font-size: 0.9em;">${escapeHtml(series.Name)}</span>
-            </h2>
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.6em; margin-bottom: 1em;">
+                <div style="display: flex; align-items: center;">
+                    <span class="material-icons tune" aria-hidden="true" style="margin-right: 0.5em; font-size: 1.5em; color: #00a4dc;"></span>
+                    <h2 style="margin: 0; font-size: 1.25em;">Standardeinstellungen</h2>
+                </div>
+                <button type="button" id="dsModalCloseIcon" style="background: transparent; border: none; color: #aaa; cursor: pointer; padding: 0.2em;">
+                    <span class="material-icons close" aria-hidden="true" style="font-size: 1.3em;"></span>
+                </button>
+            </div>
+
+            <div style="font-size: 1.05em; font-weight: bold; color: #00a4dc; margin-bottom: 1em;">
+                ${escapeHtml(series.Name)}
+            </div>
+
             <div id="dsModalLoading" style="padding: 2em; text-align: center; color: #aaa;">Lade Optionen...</div>
             <form id="dsModalForm" style="display: none;">
-                <div style="margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Bevorzugte Version / Fassung:</label>
-                    <select id="dsModalVersionSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                <div style="margin-bottom: 1.2em;">
+                    <label for="dsModalVersionSelect" style="display: block; margin-bottom: 0.35em; font-weight: bold;">Bevorzugte Version / Fassung:</label>
+                    <select id="dsModalVersionSelect" style="width: 100%; padding: 0.6em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; font-size: 0.95em;">
                         <option value="">-- Jellyfin Standard beibehalten --</option>
                     </select>
-                    <input type="text" id="dsModalVersionCustom" placeholder="Oder Freitext (z. B. Bunt, Schwarzweiss)..." style="width: 100%; margin-top: 0.4em; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; box-sizing: border-box;" />
-                    <div style="font-size: 0.8em; color: #aaa; margin-top: 0.2em;">Fehlt die Version bei einer Folge, greift automatisch Jellyfins Standard.</div>
+                    <input type="text" id="dsModalVersionCustom" placeholder="Oder Freitext (z. B. Bunt, Schwarzweiss)..." style="width: 100%; margin-top: 0.4em; padding: 0.6em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; box-sizing: border-box; font-size: 0.95em;" />
+                    <div style="font-size: 0.8em; color: #aaa; margin-top: 0.25em;">Fehlt die Version bei einer Folge, greift automatisch Jellyfins Standard.</div>
                 </div>
 
-                <div style="margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Audiosprache für diese Serie:</label>
-                    <select id="dsModalAudioSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                <div style="margin-bottom: 1.2em;">
+                    <label for="dsModalAudioSelect" style="display: block; margin-bottom: 0.35em; font-weight: bold;">Audiosprache für diese Serie:</label>
+                    <select id="dsModalAudioSelect" style="width: 100%; padding: 0.6em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; font-size: 0.95em;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                     </select>
                 </div>
 
-                <div style="margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Untertitelsprache für diese Serie:</label>
-                    <select id="dsModalSubSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                <div style="margin-bottom: 1.2em;">
+                    <label for="dsModalSubSelect" style="display: block; margin-bottom: 0.35em; font-weight: bold;">Untertitelsprache für diese Serie:</label>
+                    <select id="dsModalSubSelect" style="width: 100%; padding: 0.6em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; font-size: 0.95em;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                     </select>
                 </div>
 
-                <div style="margin-bottom: 1.5em;">
-                    <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Untertitel-Modus:</label>
-                    <select id="dsModalSubModeSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                <div style="margin-bottom: 1.6em;">
+                    <label for="dsModalSubModeSelect" style="display: block; margin-bottom: 0.35em; font-weight: bold;">Untertitel-Modus:</label>
+                    <select id="dsModalSubModeSelect" style="width: 100%; padding: 0.6em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; font-size: 0.95em;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                         <option value="0">Nur Forced (erzwungene fremde Dialoge)</option>
                         <option value="1">Immer anzeigen</option>
@@ -188,7 +281,7 @@
                 </div>
 
                 <div style="display: flex; justify-content: space-between; gap: 0.5em; flex-wrap: wrap;">
-                    <button type="submit" class="raised button-submit emby-button" style="background: #00a4dc; color: #fff; padding: 0.6em 1.2em; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    <button type="submit" class="raised button-submit emby-button" style="background: #00a4dc; color: #fff; padding: 0.6em 1.4em; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
                         <span>Speichern</span>
                     </button>
                     <button type="button" id="dsModalReset" class="raised button-flat emby-button" style="background: #555; color: #ff6666; padding: 0.6em 1.2em; border: none; border-radius: 4px; cursor: pointer; display: none;">
@@ -204,9 +297,12 @@
         overlay.appendChild(modalBox);
         document.body.appendChild(overlay);
 
-        document.getElementById('dsModalCancel').onclick = function () {
-            overlay.remove();
-        };
+        const closeModal = function () { overlay.remove(); };
+        document.getElementById('dsModalCancel').onclick = closeModal;
+        document.getElementById('dsModalCloseIcon').onclick = closeModal;
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) closeModal();
+        });
 
         // 1. Metadaten abrufen (mit clientseitigem Fallback)
         const metaPromise = ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}/Metadata?userId=${currentUserId}&targetUserId=${currentUserId}`))
@@ -258,7 +354,6 @@
         Promise.all([metaPromise, overridePromise]).then(function (results) {
             const metadata = results[0] || {};
             const rawOverride = results[1] || null;
-            // Falls das DTO nur leere Default-Werte enthält, als kein Override werten
             const currentOverride = (rawOverride && (rawOverride.PreferredVersion || rawOverride.AudioLanguage || rawOverride.SubtitleLanguage || (rawOverride.SubtitleMode !== null && rawOverride.SubtitleMode !== undefined)))
                 ? rawOverride
                 : null;
@@ -419,11 +514,4 @@
         if (!text) return '';
         return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
-
-    // Beobachter & Event-Listener für Navigation
-    window.addEventListener('hashchange', checkAndInjectButton);
-    document.addEventListener('viewshow', checkAndInjectButton);
-    document.addEventListener('pageshow', checkAndInjectButton);
-    setInterval(checkAndInjectButton, 1000);
-    checkAndInjectButton();
 })();

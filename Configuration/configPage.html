@@ -14,7 +14,7 @@
                     <h1 class="sectionTitle">DefaultSettings</h1>
                     <div class="fieldDescription">
                         Verwalten Sie serienspezifische Standardeinstellungen für Audio, Untertitel und Versionen (z. B. Bunt vs. Schwarz/Weiß). 
-                        <br><strong>Tipp:</strong> Sie können diese Einstellungen auch <em>direkt auf der Detailseite jeder Serie</em> über den Button <strong>„Standard-Spuren / Version“</strong> öffnen und anpassen!
+                        <br><strong>Tipp:</strong> Sie können diese Einstellungen auch <em>direkt bei jeder Serie, Staffel oder Episode</em> über das <strong>„...“-Menü</strong> unter <strong>„Standard-Spuren / Version“</strong> öffnen und anpassen!
                     </div>
                 </div>
 
@@ -22,8 +22,7 @@
                 <div class="verticalSection" id="secUserSelection" style="margin-top: 1.5em;">
                     <h2 class="sectionTitle">Benutzerkonto</h2>
                     <div class="selectContainer">
-                        <label class="selectLabel" for="selUser">Aktives Benutzerkonto</label>
-                        <select id="selUser" is="emby-select" class="emby-select">
+                        <select id="selUser" is="emby-select" class="emby-select" label="Aktives Benutzerkonto">
                             <option value="">Lade Benutzerkonten...</option>
                         </select>
                         <div class="fieldDescription">Wählen Sie das Benutzerkonto aus, dessen serienspezifische Standardeinstellungen Sie bearbeiten möchten.</div>
@@ -36,8 +35,7 @@
 
                     <form id="seriesOverrideForm">
                         <div class="selectContainer">
-                            <label class="selectLabel" for="selSeries">Serie auswählen</label>
-                            <select id="selSeries" is="emby-select" class="emby-select">
+                            <select id="selSeries" is="emby-select" class="emby-select" label="Serie auswählen">
                                 <option value="">-- Bitte Serie wählen --</option>
                             </select>
                             <div class="fieldDescription" id="lblSeriesCount" style="color: #888; font-size: 0.85em; margin-top: 0.2em;"></div>
@@ -52,14 +50,12 @@
                         </div>
 
                         <div class="inputContainer">
-                            <label class="inputLabel" for="txtSeriesVersion">Bevorzugte Version / Fassung</label>
-                            <input type="text" id="txtSeriesVersion" is="emby-input" class="emby-input" placeholder="z. B. Bunt oder Schwarzweiss" />
+                            <input type="text" id="txtSeriesVersion" is="emby-input" class="emby-input" label="Bevorzugte Version / Fassung" placeholder="z. B. Bunt oder Schwarzweiss" />
                             <div class="fieldDescription">Wird bei Mehrfachfassungen standardmäßig abgespielt. Fehlt die Version bei einer Folge, spielt Jellyfin automatisch den Standard ab.</div>
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="selSeriesAudio">Audiosprache für diese Serie</label>
-                            <select id="selSeriesAudio" is="emby-select" class="emby-select">
+                            <select id="selSeriesAudio" is="emby-select" class="emby-select" label="Audiosprache für diese Serie">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="deu">Deutsch (deu)</option>
                                 <option value="eng">Englisch (eng)</option>
@@ -72,13 +68,11 @@
                         </div>
 
                         <div id="divCustomSeriesAudio" class="inputContainer" style="display: none;">
-                            <label class="inputLabel" for="txtCustomSeriesAudio">Benutzerdefinierter Sprachcode für diese Serie</label>
-                            <input type="text" id="txtCustomSeriesAudio" is="emby-input" class="emby-input" placeholder="jpn" />
+                            <input type="text" id="txtCustomSeriesAudio" is="emby-input" class="emby-input" label="Benutzerdefinierter Sprachcode für diese Serie" placeholder="jpn" />
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="selSeriesSub">Untertitelsprache für diese Serie</label>
-                            <select id="selSeriesSub" is="emby-select" class="emby-select">
+                            <select id="selSeriesSub" is="emby-select" class="emby-select" label="Untertitelsprache für diese Serie">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="deu">Deutsch (deu)</option>
                                 <option value="eng">Englisch (eng)</option>
@@ -88,13 +82,11 @@
                         </div>
 
                         <div id="divCustomSeriesSub" class="inputContainer" style="display: none;">
-                            <label class="inputLabel" for="txtCustomSeriesSub">Benutzerdefinierter Untertitelcode für diese Serie</label>
-                            <input type="text" id="txtCustomSeriesSub" is="emby-input" class="emby-input" placeholder="deu" />
+                            <input type="text" id="txtCustomSeriesSub" is="emby-input" class="emby-input" label="Benutzerdefinierter Untertitelcode für diese Serie" placeholder="deu" />
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="selSeriesSubMode">Untertitel-Modus für diese Serie</label>
-                            <select id="selSeriesSubMode" is="emby-select" class="emby-select">
+                            <select id="selSeriesSubMode" is="emby-select" class="emby-select" label="Untertitel-Modus für diese Serie">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="0">Nur Forced (erzwungene)</option>
                                 <option value="1">Immer anzeigen (vollständig)</option>
@@ -139,11 +131,11 @@
 
                     <form id="adminConfigForm" style="margin-top: 1em;">
                         <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label>
+                            <label class="emby-checkbox-label">
                                 <input type="checkbox" is="emby-checkbox" id="chkPluginEnabled" class="emby-checkbox" />
-                                <span>Plugin aktivieren</span>
+                                <span class="checkboxLabel">Plugin aktivieren</span>
                             </label>
-                            <div class="fieldDescription">Schaltet die serverseitige Anpassung von Versionen und Tonspuren ein oder aus.</div>
+                            <div class="fieldDescription checkboxFieldDescription">Schaltet die serverseitige Anpassung von Versionen und Tonspuren ein oder aus.</div>
                         </div>
 
                         <div>
@@ -166,6 +158,17 @@
                 let availableUsers = [];
                 let activeUserId = "";
 
+                // Stelle sicher, dass das Client-Skript für das "..."-Menü auch in der aktuellen Session geladen ist
+                if (!window.__defaultSettingsInitialized) {
+                    const existingTag = document.querySelector('script[src*="/Plugins/DefaultSettings/ClientScript"]');
+                    if (!existingTag) {
+                        const s = document.createElement("script");
+                        s.src = ApiClient.getUrl("Plugins/DefaultSettings/ClientScript");
+                        s.defer = true;
+                        document.head.appendChild(s);
+                    }
+                }
+
                 function normalizeId(id) {
                     if (!id) return "";
                     return String(id).replace(/-/g, "").toLowerCase();
@@ -177,6 +180,23 @@
                     if (err.status) return `Server-Fehler ${err.status}: ${err.statusText || ""}`;
                     if (err.message) return err.message;
                     return JSON.stringify(err);
+                }
+
+                function getLangName(code) {
+                    if (!code) return "Standard";
+                    const map = {
+                        'deu': 'Deutsch (deu)',
+                        'ger': 'Deutsch (ger)',
+                        'eng': 'Englisch (eng)',
+                        'jpn': 'Japanisch (jpn)',
+                        'fra': 'Französisch (fra)',
+                        'spa': 'Spanisch (spa)',
+                        'ita': 'Italienisch (ita)',
+                        'kor': 'Koreanisch (kor)',
+                        'zho': 'Chinesisch (zho)',
+                        'rus': 'Russisch (rus)'
+                    };
+                    return map[code.toLowerCase()] || code;
                 }
 
                 function getSubModeLabel(mode) {
@@ -195,7 +215,6 @@
                 function initUsersAndLoad() {
                     activeUserId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
 
-                    // Benutzerliste laden: Erst über natives ApiClient.getUsers(), Fallback über Plugin
                     const usersPromise = (ApiClient.getUsers ? ApiClient.getUsers() : Promise.resolve([]))
                         .then(function (users) {
                             if (users && users.length > 0) {
@@ -259,7 +278,6 @@
                 function loadDataForUser(userId) {
                     const userParam = userId ? "?targetUserId=" + userId : "";
 
-                    // 1. Benutzereinstellungen abrufen (mit robustem Fallback auf native Plugin-Config)
                     const prefPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/MyPreferences" + userParam))
                         .catch(function (err) {
                             console.warn("Plugin-Endpunkt MyPreferences fehlgeschlagen, nutze getPluginConfiguration:", err);
@@ -279,14 +297,12 @@
                             return { UserId: userId, SeriesOverrides: [] };
                         });
 
-                    // 2. Serienliste über native ApiClient.getItems abrufen
                     const nativeSeriesPromise = ApiClient.getItems ? ApiClient.getItems(userId, {
                         IncludeItemTypes: "Series",
                         Recursive: true,
                         SortBy: "SortName"
                     }).catch(e => ({ Items: [] })) : Promise.resolve({ Items: [] });
 
-                    // 3. Serienliste über Plugin-Endpunkt abrufen
                     const pluginSeriesPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Series" + userParam)).catch(e => []);
 
                     Promise.all([prefPromise, nativeSeriesPromise, pluginSeriesPromise]).then(function (results) {
@@ -294,7 +310,6 @@
                         const nativeItems = (results[1] && results[1].Items) ? results[1].Items : [];
                         const pluginItems = Array.isArray(results[2]) ? results[2] : [];
 
-                        // Serien zusammenführen und deduplizieren
                         const seriesMap = new Map();
                         pluginItems.forEach(s => seriesMap.set(normalizeId(s.Id), { Id: s.Id, Name: s.Name, SortName: s.SortName }));
                         nativeItems.forEach(s => seriesMap.set(normalizeId(s.Id), { Id: s.Id, Name: s.Name, SortName: s.SortName || s.Name }));
@@ -313,7 +328,6 @@
                         const userNameDisplay = selectedUserObj ? selectedUserObj.Name : (currentPreferences.Username || "Benutzer");
                         document.querySelector("#lblOverridesTitle").textContent = "Aktive Serien-Ausnahmen für " + userNameDisplay;
 
-                        // Admin-Bereich steuern
                         const isAdminUser = selectedUserObj ? selectedUserObj.IsAdmin : !!currentPreferences.IsAdmin;
                         if (isAdminUser) {
                             document.querySelector("#adminSection").style.display = "block";
@@ -372,15 +386,15 @@
                         tr.innerHTML = `
                             <td style="padding: 0.75em 0.5em; font-weight: bold;">${escapeHtml(ov.SeriesName)}</td>
                             <td style="padding: 0.75em 0.5em;">${escapeHtml(ov.PreferredVersion || "Standard")}</td>
-                            <td style="padding: 0.75em 0.5em;">${escapeHtml(ov.AudioLanguage || "Standard")}</td>
-                            <td style="padding: 0.75em 0.5em;">${escapeHtml(ov.SubtitleLanguage || "Standard")}</td>
+                            <td style="padding: 0.75em 0.5em;">${escapeHtml(getLangName(ov.AudioLanguage))}</td>
+                            <td style="padding: 0.75em 0.5em;">${escapeHtml(getLangName(ov.SubtitleLanguage))}</td>
                             <td style="padding: 0.75em 0.5em;">${getSubModeLabel(ov.SubtitleMode)}</td>
                             <td style="padding: 0.75em 0.5em; text-align: right;">
-                                <button type="button" class="btnEditOverride paper-icon-button-light" data-id="${ov.SeriesId}" title="Bearbeiten" style="margin-right: 0.5em;">
-                                    <i class="md-icon">edit</i>
+                                <button type="button" class="btnEditOverride paper-icon-button-light" data-id="${ov.SeriesId}" title="Bearbeiten" style="margin-right: 0.5em; background: transparent; border: none; cursor: pointer; color: inherit;">
+                                    <span class="material-icons edit" aria-hidden="true" style="font-size: 1.2em;"></span>
                                 </button>
-                                <button type="button" class="btnDeleteOverride paper-icon-button-light" data-id="${ov.SeriesId}" title="Löschen" style="color: #ff4d4d;">
-                                    <i class="md-icon">delete</i>
+                                <button type="button" class="btnDeleteOverride paper-icon-button-light" data-id="${ov.SeriesId}" title="Löschen" style="color: #ff4d4d; background: transparent; border: none; cursor: pointer;">
+                                    <span class="material-icons delete" aria-hidden="true" style="font-size: 1.2em;"></span>
                                 </button>
                             </td>
                         `;
@@ -426,13 +440,11 @@
                     const infoBox = document.querySelector("#seriesMetadataInfo");
                     infoBox.style.display = "none";
 
-                    // Erst Plugin-Controller, Fallback clientseitig via ApiClient.getItems
                     ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}/Metadata?userId=${activeUserId}`))
                         .then(function (meta) {
                             displayMetadata(meta);
                         })
                         .catch(function () {
-                            // Clientseitiger Fallback über Episoden-Inspektion
                             if (ApiClient.getItems) {
                                 ApiClient.getItems(activeUserId, {
                                     ParentId: seriesId,
@@ -476,11 +488,11 @@
                         : "Erkannte Versionen: Keine Mehrfachversionen gefunden";
 
                     document.querySelector("#lblDetectedAudio").textContent = (meta.AvailableAudioLanguages && meta.AvailableAudioLanguages.length > 0)
-                        ? "Erkannte Audiospuren: " + meta.AvailableAudioLanguages.join(", ")
+                        ? "Erkannte Audiospuren: " + meta.AvailableAudioLanguages.map(getLangName).join(", ")
                         : "Erkannte Audiospuren: Standard";
 
                     document.querySelector("#lblDetectedSubs").textContent = (meta.AvailableSubtitleLanguages && meta.AvailableSubtitleLanguages.length > 0)
-                        ? "Erkannte Untertitel: " + meta.AvailableSubtitleLanguages.join(", ")
+                        ? "Erkannte Untertitel: " + meta.AvailableSubtitleLanguages.map(getLangName).join(", ")
                         : "Erkannte Untertitel: Keine";
                 }
 
@@ -579,7 +591,6 @@
                         PreferredVersion: version || null
                     };
 
-                    // Speichern: Erst Plugin-Endpunkt, mit Fallback auf updatePluginConfiguration
                     ApiClient.ajax({
                         type: "POST",
                         url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${sid}?targetUserId=${activeUserId}&userId=${activeUserId}`),
@@ -604,7 +615,6 @@
                             return ApiClient.updatePluginConfiguration(pluginId, cfg);
                         });
                     }).then(function () {
-                        // Aktualisiere lokalen Zustand
                         currentPreferences.SeriesOverrides = currentPreferences.SeriesOverrides || [];
                         const idx = currentPreferences.SeriesOverrides.findIndex(o => normalizeId(o.SeriesId) === normalizeId(sid));
                         if (idx >= 0) {

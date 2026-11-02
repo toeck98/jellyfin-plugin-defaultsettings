@@ -4,13 +4,13 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.DefaultSettings.Filters;
 
 /// <summary>
-/// ASP.NET Core Middleware, die das Client-Skript für den Einstellungs-Button
-/// transparent in die Jellyfin Web-Oberfläche (index.html) einbettet.
+/// ASP.NET Core Middleware, die das Client-Skript transparent in die Jellyfin Web-Oberfläche (index.html) einbettet.
 /// </summary>
 public class WebInjectionMiddleware
 {
@@ -47,8 +47,16 @@ public class WebInjectionMiddleware
         context.Request.Headers.Remove("If-Modified-Since");
 
         var originalBodyStream = context.Response.Body;
+        var originalResponseBodyFeature = context.Features.Get<IHttpResponseBodyFeature>();
+
         using var memoryStream = new MemoryStream();
         context.Response.Body = memoryStream;
+
+        // Ersetze auch IHttpResponseBodyFeature, damit Kestrel / StaticFiles nicht SendFileAsync nutzt
+        if (originalResponseBodyFeature != null)
+        {
+            context.Features.Set<IHttpResponseBodyFeature>(new StreamResponseBodyFeature(memoryStream));
+        }
 
         try
         {
@@ -86,6 +94,11 @@ public class WebInjectionMiddleware
                 context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
 
                 context.Response.Body = originalBodyStream;
+                if (originalResponseBodyFeature != null)
+                {
+                    context.Features.Set(originalResponseBodyFeature);
+                }
+
                 context.Response.ContentLength = modifiedBytes.Length;
                 await originalBodyStream.WriteAsync(modifiedBytes).ConfigureAwait(false);
             }
@@ -93,6 +106,11 @@ public class WebInjectionMiddleware
             {
                 memoryStream.Seek(0, SeekOrigin.Begin);
                 context.Response.Body = originalBodyStream;
+                if (originalResponseBodyFeature != null)
+                {
+                    context.Features.Set(originalResponseBodyFeature);
+                }
+
                 await memoryStream.CopyToAsync(originalBodyStream).ConfigureAwait(false);
             }
         }
@@ -101,6 +119,11 @@ public class WebInjectionMiddleware
             _logger.LogError(ex, "Fehler beim Injizieren des DefaultSettings Client-Skripts in index.html.");
             memoryStream.Seek(0, SeekOrigin.Begin);
             context.Response.Body = originalBodyStream;
+            if (originalResponseBodyFeature != null)
+            {
+                context.Features.Set(originalResponseBodyFeature);
+            }
+
             await memoryStream.CopyToAsync(originalBodyStream).ConfigureAwait(false);
         }
     }

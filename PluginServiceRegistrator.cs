@@ -28,5 +28,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // 4. StartupFilter für die automatische Injektion des Client-Skripts in index.html
         serviceCollection.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, WebInjectionStartupFilter>();
+
+        // 5. HostedService zur persistenten Einbettung in die statische index.html
+        serviceCollection.AddHostedService<WebIndexPatcherHostedService>();
     }
 }
