@@ -16,7 +16,6 @@ public class WebInjectionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<WebInjectionMiddleware> _logger;
-    private const string ScriptTag = "<script defer src=\"/Plugins/DefaultSettings/ClientScript\"></script>";
 
     public WebInjectionMiddleware(RequestDelegate next, ILogger<WebInjectionMiddleware> logger)
     {
@@ -28,12 +27,12 @@ public class WebInjectionMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // Prüfe, ob es sich um den Aufruf der Jellyfin Web-Startseite / index.html handelt
+        // Nur die eigentliche Startseite / Haupt-HTML abfangen (keine API, keine Templates/Partials)
         bool isWebIndex = path.Equals("/", StringComparison.OrdinalIgnoreCase) ||
                           path.Equals("/web", StringComparison.OrdinalIgnoreCase) ||
                           path.Equals("/web/", StringComparison.OrdinalIgnoreCase) ||
-                          path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase) ||
-                          path.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
+                          path.Equals("/web/index.html", StringComparison.OrdinalIgnoreCase) ||
+                          path.Equals("/index.html", StringComparison.OrdinalIgnoreCase);
 
         if (!isWebIndex)
         {
@@ -41,7 +40,7 @@ public class WebInjectionMiddleware
             return;
         }
 
-        // 1. Verhindere, dass der Server die index.html komprimiert oder mit 304 Not Modified quittiert
+        // 1. Verhindere Komprimierung oder 304 Caching bei index.html
         context.Request.Headers.Remove("Accept-Encoding");
         context.Request.Headers["Accept-Encoding"] = "identity";
         context.Request.Headers.Remove("If-None-Match");
@@ -64,13 +63,16 @@ public class WebInjectionMiddleware
 
                 if (!html.Contains("/Plugins/DefaultSettings/ClientScript", StringComparison.OrdinalIgnoreCase))
                 {
+                    var basePath = context.Request.PathBase.HasValue ? context.Request.PathBase.Value.TrimEnd('/') : string.Empty;
+                    var scriptTag = $"<script defer src=\"{basePath}/Plugins/DefaultSettings/ClientScript\"></script>";
+
                     if (Regex.IsMatch(html, "</body>", RegexOptions.IgnoreCase))
                     {
-                        html = Regex.Replace(html, "</body>", ScriptTag + "</body>", RegexOptions.IgnoreCase);
+                        html = Regex.Replace(html, "</body>", scriptTag + "</body>", RegexOptions.IgnoreCase);
                     }
                     else
                     {
-                        html += ScriptTag;
+                        html += scriptTag;
                     }
 
                     _logger.LogDebug("DefaultSettings Client-Skript wurde erfolgreich in index.html injiziert.");

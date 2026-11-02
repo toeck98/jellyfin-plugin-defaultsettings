@@ -18,14 +18,15 @@ public static class StreamSelectionHelper
     public static void ApplyPreferences(
         IList<MediaSourceInfo> mediaSources,
         UserDefaultPreference? userPref,
-        SeriesPreferenceOverride? seriesOverride)
+        SeriesPreferenceOverride? seriesOverride,
+        bool allowVersionReorder = true)
     {
         if (mediaSources == null || mediaSources.Count == 0)
         {
             return;
         }
 
-        // Wenn weder ein Serien-Override noch ein Versions-Keyword existiert: Native Jellyfin-Auswahl unverändert lassen!
+        // Wenn kein Override vorhanden ist: unverändert lassen
         if (seriesOverride == null && string.IsNullOrWhiteSpace(userPref?.PreferredVersionKeyword))
         {
             return;
@@ -38,7 +39,7 @@ public static class StreamSelectionHelper
             preferredVersion = userPref?.PreferredVersionKeyword;
         }
 
-        if (!string.IsNullOrWhiteSpace(preferredVersion) && mediaSources.Count > 1)
+        if (allowVersionReorder && !string.IsNullOrWhiteSpace(preferredVersion) && mediaSources.Count > 1)
         {
             var preferredTrimmed = preferredVersion.Trim();
             int matchIndex = -1;
@@ -61,10 +62,9 @@ public static class StreamSelectionHelper
                 mediaSources.RemoveAt(matchIndex);
                 mediaSources.Insert(0, matchedSource);
             }
-            // Falls Wunschversion bei dieser Folge nicht vorhanden: Jellyfin Standard beibehalten
         }
 
-        // 2. Audio- und Untertitel-Spuren konfigurieren (nur wenn für diese Serie explizit überschrieben)
+        // 2. Audio- und Untertitel-Spuren konfigurieren
         var targetAudioLang = seriesOverride?.AudioLanguage;
         var targetSubLang = seriesOverride?.SubtitleLanguage;
         var subMode = seriesOverride?.SubtitleMode;
@@ -114,7 +114,7 @@ public static class StreamSelectionHelper
             }
         }
 
-        // Falls keine passende Audiospur gefunden oder keine Zielsprache definiert: Aktiven Container-Standard ermitteln
+        // Falls keine passende Audiospur gefunden oder keine Zielsprache definiert: Aktiven Standard ermitteln
         chosenAudio ??= audioStreams.FirstOrDefault(a => a.IsDefault) ?? audioStreams.FirstOrDefault();
 
         // --- Untertitel Stream Auswahl (nur wenn SubtitleLanguage oder SubtitleMode gesetzt sind) ---
@@ -142,9 +142,12 @@ public static class StreamSelectionHelper
                 }
                 else if (effectiveMode == SubtitleModePreference.Smart)
                 {
-                    bool isForeignAudio = chosenAudio != null && !string.IsNullOrWhiteSpace(targetAudioLang) && !MatchesLanguage(chosenAudio, targetAudioLang);
+                    // Smart-Modus: Fremdsprachiger Ton bedeutet:
+                    // 1. Entweder ist der gewählte Ton fremd bezogen auf die gewünschte Untertitelsprache (z.B. Ton ist nicht Deutsch)
+                    // 2. Oder falls targetAudioLang explizit angegeben ist, der gefundene Ton entspricht nicht dieser targetAudioLang
+                    bool isForeignToSub = chosenAudio != null && !MatchesLanguage(chosenAudio, targetSubLang);
 
-                    if (isForeignAudio)
+                    if (isForeignToSub)
                     {
                         var regular = subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang) && !s.IsForced)
                                    ?? subStreams.FirstOrDefault(s => MatchesLanguage(s, targetSubLang));

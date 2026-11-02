@@ -1,6 +1,6 @@
 # Lokales Pack-Skript für DefaultSettings
 param (
-    [string]$Version = "1.2.0.0"
+    [string]$Version = "1.3.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +10,7 @@ Write-Host "Baue Plugin DefaultSettings in Version $Version..." -ForegroundColor
 # 1. Kompilieren
 dotnet build "$PSScriptRoot\DefaultSettings.csproj" -c Release /p:Version=$Version
 
-$binDir = "$PSScriptRoot\bin\Release\net8.0"
+$binDir = "$PSScriptRoot\bin\Release\net10.0"
 $artifactsDir = "$PSScriptRoot\artifacts"
 
 if (!(Test-Path $artifactsDir)) {

@@ -13,17 +13,17 @@
                 <div class="sectionTitleContainer">
                     <h1 class="sectionTitle">DefaultSettings</h1>
                     <div class="fieldDescription">
-                        Verwalten Sie serienspezifische Standardeinstellungen für Audio, Untertitel und Schnittfassungen/Versionen (z. B. Bunt vs. Schwarz/Weiß). 
+                        Verwalten Sie serienspezifische Standardeinstellungen für Audio, Untertitel und Versionen (z. B. Bunt vs. Schwarz/Weiß). 
                         <br><strong>Tipp:</strong> Sie können diese Einstellungen auch <em>direkt auf der Detailseite jeder Serie</em> über den Button <strong>„Standard-Spuren / Version“</strong> öffnen und anpassen!
                     </div>
                 </div>
 
-                <!-- Benutzer-Auswahl (insbesondere für Administratoren) -->
+                <!-- Benutzer-Auswahl -->
                 <div class="verticalSection" id="secUserSelection" style="margin-top: 1.5em;">
                     <h2 class="sectionTitle">Benutzerkonto</h2>
                     <div class="selectContainer">
                         <label class="selectLabel" for="selUser">Aktives Benutzerkonto</label>
-                        <select id="selUser" class="emby-select">
+                        <select id="selUser" is="emby-select" class="emby-select">
                             <option value="">Lade Benutzerkonten...</option>
                         </select>
                         <div class="fieldDescription">Wählen Sie das Benutzerkonto aus, dessen serienspezifische Standardeinstellungen Sie bearbeiten möchten.</div>
@@ -37,7 +37,7 @@
                     <form id="seriesOverrideForm">
                         <div class="selectContainer">
                             <label class="selectLabel" for="selSeries">Serie auswählen</label>
-                            <select id="selSeries" class="emby-select">
+                            <select id="selSeries" is="emby-select" class="emby-select">
                                 <option value="">-- Bitte Serie wählen --</option>
                             </select>
                             <div class="fieldDescription" id="lblSeriesCount" style="color: #888; font-size: 0.85em; margin-top: 0.2em;"></div>
@@ -53,13 +53,13 @@
 
                         <div class="inputContainer">
                             <label class="inputLabel" for="txtSeriesVersion">Bevorzugte Version / Fassung</label>
-                            <input type="text" id="txtSeriesVersion" class="emby-input" placeholder="z. B. Bunt oder Schwarzweiss" />
+                            <input type="text" id="txtSeriesVersion" is="emby-input" class="emby-input" placeholder="z. B. Bunt oder Schwarzweiss" />
                             <div class="fieldDescription">Wird bei Mehrfachfassungen standardmäßig abgespielt. Fehlt die Version bei einer Folge, spielt Jellyfin automatisch den Standard ab.</div>
                         </div>
 
                         <div class="selectContainer">
                             <label class="selectLabel" for="selSeriesAudio">Audiosprache für diese Serie</label>
-                            <select id="selSeriesAudio" class="emby-select">
+                            <select id="selSeriesAudio" is="emby-select" class="emby-select">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="deu">Deutsch (deu)</option>
                                 <option value="eng">Englisch (eng)</option>
@@ -73,12 +73,12 @@
 
                         <div id="divCustomSeriesAudio" class="inputContainer" style="display: none;">
                             <label class="inputLabel" for="txtCustomSeriesAudio">Benutzerdefinierter Sprachcode für diese Serie</label>
-                            <input type="text" id="txtCustomSeriesAudio" class="emby-input" placeholder="jpn" />
+                            <input type="text" id="txtCustomSeriesAudio" is="emby-input" class="emby-input" placeholder="jpn" />
                         </div>
 
                         <div class="selectContainer">
                             <label class="selectLabel" for="selSeriesSub">Untertitelsprache für diese Serie</label>
-                            <select id="selSeriesSub" class="emby-select">
+                            <select id="selSeriesSub" is="emby-select" class="emby-select">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="deu">Deutsch (deu)</option>
                                 <option value="eng">Englisch (eng)</option>
@@ -89,12 +89,12 @@
 
                         <div id="divCustomSeriesSub" class="inputContainer" style="display: none;">
                             <label class="inputLabel" for="txtCustomSeriesSub">Benutzerdefinierter Untertitelcode für diese Serie</label>
-                            <input type="text" id="txtCustomSeriesSub" class="emby-input" placeholder="deu" />
+                            <input type="text" id="txtCustomSeriesSub" is="emby-input" class="emby-input" placeholder="deu" />
                         </div>
 
                         <div class="selectContainer">
                             <label class="selectLabel" for="selSeriesSubMode">Untertitel-Modus für diese Serie</label>
-                            <select id="selSeriesSubMode" class="emby-select">
+                            <select id="selSeriesSubMode" is="emby-select" class="emby-select">
                                 <option value="">-- Jellyfin Kontoeinstellung beibehalten --</option>
                                 <option value="0">Nur Forced (erzwungene)</option>
                                 <option value="1">Immer anzeigen (vollständig)</option>
@@ -140,7 +140,7 @@
                     <form id="adminConfigForm" style="margin-top: 1em;">
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label>
-                                <input type="checkbox" id="chkPluginEnabled" class="emby-checkbox" />
+                                <input type="checkbox" is="emby-checkbox" id="chkPluginEnabled" class="emby-checkbox" />
                                 <span>Plugin aktivieren</span>
                             </label>
                             <div class="fieldDescription">Schaltet die serverseitige Anpassung von Versionen und Tonspuren ein oder aus.</div>
@@ -159,11 +159,25 @@
 
         <script type="text/javascript">
             (function () {
+                const pluginId = "2ff22cec-2c92-4428-a1b3-d1ff33748bf2";
                 const page = document.querySelector("#DefaultSettingsConfigPage");
                 let currentPreferences = null;
                 let availableSeries = [];
                 let availableUsers = [];
                 let activeUserId = "";
+
+                function normalizeId(id) {
+                    if (!id) return "";
+                    return String(id).replace(/-/g, "").toLowerCase();
+                }
+
+                function formatApiError(err) {
+                    if (!err) return "Unbekannter Fehler";
+                    if (typeof err === "string") return err;
+                    if (err.status) return `Server-Fehler ${err.status}: ${err.statusText || ""}`;
+                    if (err.message) return err.message;
+                    return JSON.stringify(err);
+                }
 
                 function getSubModeLabel(mode) {
                     if (mode === 0 || mode === "0") return "Nur Forced";
@@ -181,13 +195,28 @@
                 function initUsersAndLoad() {
                     activeUserId = ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : "";
 
-                    ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Users")).then(function (users) {
+                    // Benutzerliste laden: Erst über natives ApiClient.getUsers(), Fallback über Plugin
+                    const usersPromise = (ApiClient.getUsers ? ApiClient.getUsers() : Promise.resolve([]))
+                        .then(function (users) {
+                            if (users && users.length > 0) {
+                                return users.map(u => ({
+                                    Id: u.Id,
+                                    Name: u.Name,
+                                    IsAdmin: !!(u.Policy && u.Policy.IsAdministrator)
+                                }));
+                            }
+                            return ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Users"));
+                        })
+                        .catch(function () {
+                            return ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Users")).catch(e => []);
+                        });
+
+                    usersPromise.then(function (users) {
                         availableUsers = users || [];
                         renderUserDropdown(availableUsers);
 
-                        // Falls der aktuelle Benutzer in der Liste ist, vorwählen
                         const selUser = document.querySelector("#selUser");
-                        if (availableUsers.some(u => u.Id === activeUserId)) {
+                        if (availableUsers.some(u => normalizeId(u.Id) === normalizeId(activeUserId))) {
                             selUser.value = activeUserId;
                         } else if (availableUsers.length > 0) {
                             activeUserId = availableUsers[0].Id;
@@ -196,19 +225,8 @@
 
                         loadDataForUser(activeUserId);
                     }).catch(function (err) {
-                        console.warn("Konnte Benutzerliste nicht über Plugin laden, Fallback auf ApiClient:", err);
-                        if (ApiClient.getUsers) {
-                            ApiClient.getUsers().then(function (users) {
-                                availableUsers = users.map(u => ({ Id: u.Id, Name: u.Name, IsAdmin: u.Policy && u.Policy.IsAdministrator }));
-                                renderUserDropdown(availableUsers);
-                                document.querySelector("#selUser").value = activeUserId;
-                                loadDataForUser(activeUserId);
-                            }).catch(function () {
-                                loadDataForUser(activeUserId);
-                            });
-                        } else {
-                            loadDataForUser(activeUserId);
-                        }
+                        console.warn("Fehler bei Benutzerinitialisierung:", err);
+                        loadDataForUser(activeUserId);
                     });
                 }
 
@@ -241,27 +259,45 @@
                 function loadDataForUser(userId) {
                     const userParam = userId ? "?targetUserId=" + userId : "";
 
-                    // Lade Einstellungen des ausgewählten Benutzers
-                    const prefPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/MyPreferences" + userParam));
+                    // 1. Benutzereinstellungen abrufen (mit robustem Fallback auf native Plugin-Config)
+                    const prefPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/MyPreferences" + userParam))
+                        .catch(function (err) {
+                            console.warn("Plugin-Endpunkt MyPreferences fehlgeschlagen, nutze getPluginConfiguration:", err);
+                            return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                                const userPrefsList = (cfg && cfg.UserPreferences) ? cfg.UserPreferences : [];
+                                const match = userPrefsList.find(u => normalizeId(u.UserId) === normalizeId(userId)) || {};
+                                return {
+                                    UserId: userId,
+                                    Username: "Benutzer",
+                                    IsAdmin: true,
+                                    SeriesOverrides: match.SeriesOverrides || []
+                                };
+                            });
+                        })
+                        .catch(function (e) {
+                            console.error("Konnte Benutzereinstellungen nicht laden:", e);
+                            return { UserId: userId, SeriesOverrides: [] };
+                        });
 
-                    // Lade Serien: Erst über natives ApiClient.getItems, parallel über Plugin-Controller
+                    // 2. Serienliste über native ApiClient.getItems abrufen
                     const nativeSeriesPromise = ApiClient.getItems ? ApiClient.getItems(userId, {
                         IncludeItemTypes: "Series",
                         Recursive: true,
                         SortBy: "SortName"
                     }).catch(e => ({ Items: [] })) : Promise.resolve({ Items: [] });
 
+                    // 3. Serienliste über Plugin-Endpunkt abrufen
                     const pluginSeriesPromise = ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Series" + userParam)).catch(e => []);
 
                     Promise.all([prefPromise, nativeSeriesPromise, pluginSeriesPromise]).then(function (results) {
-                        currentPreferences = results[0] || {};
+                        currentPreferences = results[0] || { SeriesOverrides: [] };
                         const nativeItems = (results[1] && results[1].Items) ? results[1].Items : [];
                         const pluginItems = Array.isArray(results[2]) ? results[2] : [];
 
                         // Serien zusammenführen und deduplizieren
                         const seriesMap = new Map();
-                        pluginItems.forEach(s => seriesMap.set(s.Id, { Id: s.Id, Name: s.Name, SortName: s.SortName }));
-                        nativeItems.forEach(s => seriesMap.set(s.Id, { Id: s.Id, Name: s.Name, SortName: s.SortName || s.Name }));
+                        pluginItems.forEach(s => seriesMap.set(normalizeId(s.Id), { Id: s.Id, Name: s.Name, SortName: s.SortName }));
+                        nativeItems.forEach(s => seriesMap.set(normalizeId(s.Id), { Id: s.Id, Name: s.Name, SortName: s.SortName || s.Name }));
 
                         availableSeries = Array.from(seriesMap.values()).sort((a, b) => {
                             const nameA = a.SortName || a.Name || "";
@@ -273,11 +309,13 @@
                         renderOverridesTable(currentPreferences.SeriesOverrides || []);
                         clearSeriesForm();
 
-                        const selectedUserObj = availableUsers.find(u => u.Id === userId);
+                        const selectedUserObj = availableUsers.find(u => normalizeId(u.Id) === normalizeId(userId));
                         const userNameDisplay = selectedUserObj ? selectedUserObj.Name : (currentPreferences.Username || "Benutzer");
                         document.querySelector("#lblOverridesTitle").textContent = "Aktive Serien-Ausnahmen für " + userNameDisplay;
 
-                        if (currentPreferences.IsAdmin) {
+                        // Admin-Bereich steuern
+                        const isAdminUser = selectedUserObj ? selectedUserObj.IsAdmin : !!currentPreferences.IsAdmin;
+                        if (isAdminUser) {
                             document.querySelector("#adminSection").style.display = "block";
                             loadAdminConfig();
                         } else {
@@ -288,7 +326,7 @@
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
                         console.error("Ladefehler:", err);
-                        Dashboard.alert("Fehler beim Laden der Einstellungen: " + err);
+                        Dashboard.alert("Fehler beim Laden der Einstellungen: " + formatApiError(err));
                     });
                 }
 
@@ -388,22 +426,62 @@
                     const infoBox = document.querySelector("#seriesMetadataInfo");
                     infoBox.style.display = "none";
 
-                    ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}/Metadata?userId=${activeUserId}`)).then(function (meta) {
-                        infoBox.style.display = "block";
-                        document.querySelector("#lblDetectedVersions").textContent = meta.AvailableVersions.length > 0
-                            ? "Erkannte Versionen: " + meta.AvailableVersions.join(", ")
-                            : "Erkannte Versionen: Keine Mehrfachversionen gefunden";
+                    // Erst Plugin-Controller, Fallback clientseitig via ApiClient.getItems
+                    ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}/Metadata?userId=${activeUserId}`))
+                        .then(function (meta) {
+                            displayMetadata(meta);
+                        })
+                        .catch(function () {
+                            // Clientseitiger Fallback über Episoden-Inspektion
+                            if (ApiClient.getItems) {
+                                ApiClient.getItems(activeUserId, {
+                                    ParentId: seriesId,
+                                    IncludeItemTypes: "Episode",
+                                    Recursive: true,
+                                    Fields: "MediaSources,MediaStreams",
+                                    Limit: 25
+                                }).then(function (res) {
+                                    const eps = (res && res.Items) ? res.Items : [];
+                                    const vSet = new Set();
+                                    const aSet = new Set();
+                                    const sSet = new Set();
 
-                        document.querySelector("#lblDetectedAudio").textContent = meta.AvailableAudioLanguages.length > 0
-                            ? "Erkannte Audiospuren: " + meta.AvailableAudioLanguages.join(", ")
-                            : "Erkannte Audiospuren: Standard";
+                                    eps.forEach(ep => {
+                                        (ep.MediaSources || []).forEach(src => {
+                                            if (src.Name && src.Name !== ep.Name) vSet.add(src.Name);
+                                            (src.MediaStreams || []).forEach(st => {
+                                                if (st.Type === "Audio" && st.Language) aSet.add(st.Language.toLowerCase());
+                                                if (st.Type === "Subtitle" && st.Language) sSet.add(st.Language.toLowerCase());
+                                            });
+                                        });
+                                    });
 
-                        document.querySelector("#lblDetectedSubs").textContent = meta.AvailableSubtitleLanguages.length > 0
-                            ? "Erkannte Untertitel: " + meta.AvailableSubtitleLanguages.join(", ")
-                            : "Erkannte Untertitel: Keine";
-                    }).catch(function (e) {
-                        console.warn("Metadaten konnten nicht geladen werden:", e);
-                    });
+                                    displayMetadata({
+                                        AvailableVersions: Array.from(vSet),
+                                        AvailableAudioLanguages: Array.from(aSet),
+                                        AvailableSubtitleLanguages: Array.from(sSet)
+                                    });
+                                }).catch(function (e) {
+                                    console.warn("Metadaten konnten nicht ermittelt werden:", e);
+                                });
+                            }
+                        });
+                }
+
+                function displayMetadata(meta) {
+                    const infoBox = document.querySelector("#seriesMetadataInfo");
+                    infoBox.style.display = "block";
+                    document.querySelector("#lblDetectedVersions").textContent = (meta.AvailableVersions && meta.AvailableVersions.length > 0)
+                        ? "Erkannte Versionen: " + meta.AvailableVersions.join(", ")
+                        : "Erkannte Versionen: Keine Mehrfachversionen gefunden";
+
+                    document.querySelector("#lblDetectedAudio").textContent = (meta.AvailableAudioLanguages && meta.AvailableAudioLanguages.length > 0)
+                        ? "Erkannte Audiospuren: " + meta.AvailableAudioLanguages.join(", ")
+                        : "Erkannte Audiospuren: Standard";
+
+                    document.querySelector("#lblDetectedSubs").textContent = (meta.AvailableSubtitleLanguages && meta.AvailableSubtitleLanguages.length > 0)
+                        ? "Erkannte Untertitel: " + meta.AvailableSubtitleLanguages.join(", ")
+                        : "Erkannte Untertitel: Keine";
                 }
 
                 function loadOverrideToForm(seriesId, scroll = true) {
@@ -411,7 +489,7 @@
                     selSeries.value = seriesId;
                     document.querySelector("#btnSaveSeriesOverride").disabled = false;
 
-                    const override = (currentPreferences.SeriesOverrides || []).find(o => o.SeriesId === seriesId);
+                    const override = (currentPreferences.SeriesOverrides || []).find(o => normalizeId(o.SeriesId) === normalizeId(seriesId));
 
                     if (override) {
                         document.querySelector("#txtSeriesVersion").value = override.PreferredVersion || "";
@@ -422,8 +500,8 @@
                         if (!override.AudioLanguage) {
                             selAudio.value = "";
                             divAudio.style.display = "none";
-                        } else if (["deu", "eng", "jpn", "fra", "spa", "ita"].includes(override.AudioLanguage)) {
-                            selAudio.value = override.AudioLanguage;
+                        } else if (["deu", "eng", "jpn", "fra", "spa", "ita"].includes(override.AudioLanguage.toLowerCase())) {
+                            selAudio.value = override.AudioLanguage.toLowerCase();
                             divAudio.style.display = "none";
                         } else {
                             selAudio.value = "custom";
@@ -437,8 +515,8 @@
                         if (!override.SubtitleLanguage) {
                             selSub.value = "";
                             divSub.style.display = "none";
-                        } else if (["deu", "eng", "jpn"].includes(override.SubtitleLanguage)) {
-                            selSub.value = override.SubtitleLanguage;
+                        } else if (["deu", "eng", "jpn"].includes(override.SubtitleLanguage.toLowerCase())) {
+                            selSub.value = override.SubtitleLanguage.toLowerCase();
                             divSub.style.display = "none";
                         } else {
                             selSub.value = "custom";
@@ -489,28 +567,58 @@
                     const subMode = rawMode === "" ? null : parseInt(rawMode, 10);
                     const version = document.querySelector("#txtSeriesVersion").value.trim();
 
+                    const seriesObj = availableSeries.find(s => normalizeId(s.Id) === normalizeId(sid));
+                    const seriesName = seriesObj ? seriesObj.Name : "Serie";
+
                     const payload = {
+                        SeriesId: sid,
+                        SeriesName: seriesName,
                         AudioLanguage: audio || null,
                         SubtitleLanguage: sub || null,
                         SubtitleMode: subMode,
                         PreferredVersion: version || null
                     };
 
+                    // Speichern: Erst Plugin-Endpunkt, mit Fallback auf updatePluginConfiguration
                     ApiClient.ajax({
                         type: "POST",
-                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${sid}?targetUserId=${activeUserId}`),
+                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${sid}?targetUserId=${activeUserId}&userId=${activeUserId}`),
                         data: JSON.stringify(payload),
                         contentType: "application/json"
+                    }).catch(function (err) {
+                        console.warn("POST /Plugins/DefaultSettings/Series fehlgeschlagen, nutze updatePluginConfiguration Fallback:", err);
+                        return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                            cfg.UserPreferences = cfg.UserPreferences || [];
+                            let uPref = cfg.UserPreferences.find(u => normalizeId(u.UserId) === normalizeId(activeUserId));
+                            if (!uPref) {
+                                uPref = { UserId: activeUserId, SeriesOverrides: [] };
+                                cfg.UserPreferences.push(uPref);
+                            }
+                            uPref.SeriesOverrides = uPref.SeriesOverrides || [];
+                            const exIdx = uPref.SeriesOverrides.findIndex(o => normalizeId(o.SeriesId) === normalizeId(sid));
+                            if (exIdx >= 0) {
+                                uPref.SeriesOverrides[exIdx] = payload;
+                            } else {
+                                uPref.SeriesOverrides.push(payload);
+                            }
+                            return ApiClient.updatePluginConfiguration(pluginId, cfg);
+                        });
                     }).then(function () {
-                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?targetUserId=${activeUserId}`));
-                    }).then(function (updatedPref) {
-                        currentPreferences = updatedPref;
-                        renderOverridesTable(currentPreferences.SeriesOverrides || []);
+                        // Aktualisiere lokalen Zustand
+                        currentPreferences.SeriesOverrides = currentPreferences.SeriesOverrides || [];
+                        const idx = currentPreferences.SeriesOverrides.findIndex(o => normalizeId(o.SeriesId) === normalizeId(sid));
+                        if (idx >= 0) {
+                            currentPreferences.SeriesOverrides[idx] = payload;
+                        } else {
+                            currentPreferences.SeriesOverrides.push(payload);
+                        }
+
+                        renderOverridesTable(currentPreferences.SeriesOverrides);
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert("Serieneinstellung gespeichert.");
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
-                        Dashboard.alert("Fehler beim Speichern: " + err);
+                        Dashboard.alert("Fehler beim Speichern: " + formatApiError(err));
                     });
                 });
 
@@ -519,27 +627,41 @@
 
                     ApiClient.ajax({
                         type: "DELETE",
-                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}?targetUserId=${activeUserId}`)
+                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${seriesId}?targetUserId=${activeUserId}&userId=${activeUserId}`)
+                    }).catch(function (err) {
+                        console.warn("DELETE /Plugins/DefaultSettings/Series fehlgeschlagen, nutze updatePluginConfiguration Fallback:", err);
+                        return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                            cfg.UserPreferences = cfg.UserPreferences || [];
+                            const uPref = cfg.UserPreferences.find(u => normalizeId(u.UserId) === normalizeId(activeUserId));
+                            if (uPref && uPref.SeriesOverrides) {
+                                uPref.SeriesOverrides = uPref.SeriesOverrides.filter(o => normalizeId(o.SeriesId) !== normalizeId(seriesId));
+                                return ApiClient.updatePluginConfiguration(pluginId, cfg);
+                            }
+                        });
                     }).then(function () {
-                        return ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/MyPreferences?targetUserId=${activeUserId}`));
-                    }).then(function (updatedPref) {
-                        currentPreferences = updatedPref;
-                        renderOverridesTable(currentPreferences.SeriesOverrides || []);
-                        if (document.querySelector("#selSeries").value === seriesId) {
+                        if (currentPreferences && currentPreferences.SeriesOverrides) {
+                            currentPreferences.SeriesOverrides = currentPreferences.SeriesOverrides.filter(o => normalizeId(o.SeriesId) !== normalizeId(seriesId));
+                            renderOverridesTable(currentPreferences.SeriesOverrides);
+                        }
+                        if (normalizeId(document.querySelector("#selSeries").value) === normalizeId(seriesId)) {
                             clearSeriesForm();
                         }
                         Dashboard.hideLoadingMsg();
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
-                        Dashboard.alert("Fehler beim Löschen: " + err);
+                        Dashboard.alert("Fehler beim Löschen: " + formatApiError(err));
                     });
                 }
 
                 function loadAdminConfig() {
-                    ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Configuration")).then(function (config) {
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         document.querySelector("#chkPluginEnabled").checked = config.IsEnabled ?? true;
-                    }).catch(function (err) {
-                        console.error("Admin-Config Ladefehler:", err);
+                    }).catch(function () {
+                        ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Configuration")).then(function (config) {
+                            document.querySelector("#chkPluginEnabled").checked = config.IsEnabled ?? true;
+                        }).catch(function (err) {
+                            console.warn("Admin-Config konnte nicht geladen werden:", err);
+                        });
                     });
                 }
 
@@ -547,21 +669,15 @@
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
 
-                    ApiClient.getJSON(ApiClient.getUrl("Plugins/DefaultSettings/Configuration")).then(function (config) {
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.IsEnabled = document.querySelector("#chkPluginEnabled").checked;
-
-                        return ApiClient.ajax({
-                            type: "POST",
-                            url: ApiClient.getUrl("Plugins/DefaultSettings/Configuration"),
-                            data: JSON.stringify(config),
-                            contentType: "application/json"
-                        });
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
                     }).then(function () {
                         Dashboard.hideLoadingMsg();
                         Dashboard.alert("Status gespeichert.");
                     }).catch(function (err) {
                         Dashboard.hideLoadingMsg();
-                        Dashboard.alert("Fehler beim Speichern: " + err);
+                        Dashboard.alert("Fehler beim Speichern: " + formatApiError(err));
                     });
                 });
 

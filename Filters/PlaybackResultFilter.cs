@@ -93,11 +93,24 @@ public class PlaybackResultFilter : IAsyncResultFilter
             seriesId = item.FindParent<Series>()?.Id;
         }
 
-        var userPref = _settingsManager.GetUserPreferences(userId.Value);
-        var seriesOverride = seriesId.HasValue ? _settingsManager.GetSeriesOverride(userId.Value, seriesId.Value) : null;
+        if (!seriesId.HasValue)
+        {
+            return;
+        }
+
+        var seriesOverride = _settingsManager.GetSeriesOverride(userId.Value, seriesId.Value);
+        if (seriesOverride == null)
+        {
+            return;
+        }
+
+        // Falls der Client im Request explizit eine mediaSourceId übergeben hat (z. B. manueller Versionswechsel),
+        // diese nicht durch die bevorzugte Version übersteuern!
+        bool explicitMediaSourceRequested = httpContext.Request.Query.ContainsKey("mediaSourceId")
+                                         || httpContext.Request.Query.ContainsKey("MediaSourceId");
 
         var sourcesList = new List<MediaSourceInfo>(playbackInfo.MediaSources);
-        StreamSelectionHelper.ApplyPreferences(sourcesList, userPref, seriesOverride);
+        StreamSelectionHelper.ApplyPreferences(sourcesList, null, seriesOverride, allowVersionReorder: !explicitMediaSourceRequested);
 
         playbackInfo.MediaSources = sourcesList;
         _logger.LogDebug("DefaultSettings angewendet auf PlaybackInfo für Item {ItemId} (User: {UserId}, Serie: {SeriesId}).",
@@ -122,11 +135,19 @@ public class PlaybackResultFilter : IAsyncResultFilter
             }
         }
 
-        var userPref = _settingsManager.GetUserPreferences(userId.Value);
-        var seriesOverride = seriesId.HasValue ? _settingsManager.GetSeriesOverride(userId.Value, seriesId.Value) : null;
+        if (!seriesId.HasValue)
+        {
+            return;
+        }
+
+        var seriesOverride = _settingsManager.GetSeriesOverride(userId.Value, seriesId.Value);
+        if (seriesOverride == null)
+        {
+            return;
+        }
 
         var sourcesList = new List<MediaSourceInfo>(itemDto.MediaSources);
-        StreamSelectionHelper.ApplyPreferences(sourcesList, userPref, seriesOverride);
+        StreamSelectionHelper.ApplyPreferences(sourcesList, null, seriesOverride, allowVersionReorder: true);
 
         itemDto.MediaSources = sourcesList.ToArray();
         _logger.LogDebug("DefaultSettings angewendet auf BaseItemDto für Item {ItemId} (User: {UserId}).", itemDto.Id, userId.Value);
@@ -134,8 +155,9 @@ public class PlaybackResultFilter : IAsyncResultFilter
 
     private static Guid? ExtractUserId(HttpContext context)
     {
-        // 1. Claims
-        var claim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+        // 1. Claims (Jellyfin-UserId, NameIdentifier, UserId)
+        var claim = context.User.FindFirst("Jellyfin-UserId")?.Value
+                 ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                  ?? context.User.FindFirst("UserId")?.Value;
 
         if (!string.IsNullOrEmpty(claim) && Guid.TryParse(claim, out var fromClaim))
@@ -149,7 +171,18 @@ public class PlaybackResultFilter : IAsyncResultFilter
             return fromQuery;
         }
 
-        // 3. Route Values
+        if (context.Request.Query.TryGetValue("userId", out var qUserIdLower) && Guid.TryParse(qUserIdLower, out var fromQueryLower))
+        {
+            return fromQueryLower;
+        }
+
+        // 3. Header 'X-Emby-UserId'
+        if (context.Request.Headers.TryGetValue("X-Emby-UserId", out var hUserId) && Guid.TryParse(hUserId, out var fromHeader))
+        {
+            return fromHeader;
+        }
+
+        // 4. Route Values
         if (context.Request.RouteValues.TryGetValue("userId", out var rUserId) && Guid.TryParse(rUserId?.ToString(), out var fromRoute))
         {
             return fromRoute;

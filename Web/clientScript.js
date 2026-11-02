@@ -2,7 +2,13 @@
 (function () {
     'use strict';
 
+    const pluginId = "2ff22cec-2c92-4428-a1b3-d1ff33748bf2";
     console.log('[DefaultSettings] Client-Skript erfolgreich initialisiert.');
+
+    function normalizeId(id) {
+        if (!id) return '';
+        return String(id).replace(/-/g, '').toLowerCase();
+    }
 
     function getActiveItemId() {
         // 1. Aus dem Hash (?id=... oder &id=...)
@@ -149,7 +155,7 @@
             <form id="dsModalForm" style="display: none;">
                 <div style="margin-bottom: 1em;">
                     <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Bevorzugte Version / Fassung:</label>
-                    <select id="dsModalVersionSelect" class="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                    <select id="dsModalVersionSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
                         <option value="">-- Jellyfin Standard beibehalten --</option>
                     </select>
                     <input type="text" id="dsModalVersionCustom" placeholder="Oder Freitext (z. B. Bunt, Schwarzweiss)..." style="width: 100%; margin-top: 0.4em; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444; box-sizing: border-box;" />
@@ -158,21 +164,21 @@
 
                 <div style="margin-bottom: 1em;">
                     <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Audiosprache für diese Serie:</label>
-                    <select id="dsModalAudioSelect" class="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                    <select id="dsModalAudioSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                     </select>
                 </div>
 
                 <div style="margin-bottom: 1em;">
                     <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Untertitelsprache für diese Serie:</label>
-                    <select id="dsModalSubSelect" class="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                    <select id="dsModalSubSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                     </select>
                 </div>
 
                 <div style="margin-bottom: 1.5em;">
                     <label style="display: block; margin-bottom: 0.3em; font-weight: bold;">Untertitel-Modus:</label>
-                    <select id="dsModalSubModeSelect" class="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
+                    <select id="dsModalSubModeSelect" class="emby-select" is="emby-select" style="width: 100%; padding: 0.5em; border-radius: 4px; background: #2b2b2b; color: #fff; border: 1px solid #444;">
                         <option value="">-- Jellyfin Kontoeinstellung verwenden --</option>
                         <option value="0">Nur Forced (erzwungene fremde Dialoge)</option>
                         <option value="1">Immer anzeigen</option>
@@ -202,13 +208,60 @@
             overlay.remove();
         };
 
-        // Daten laden (Metadaten & bestehender Override)
-        Promise.all([
-            ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}/Metadata?userId=${currentUserId}`)),
-            ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}`))
-        ]).then(function (results) {
+        // 1. Metadaten abrufen (mit clientseitigem Fallback)
+        const metaPromise = ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}/Metadata?userId=${currentUserId}&targetUserId=${currentUserId}`))
+            .catch(function () {
+                if (!ApiClient.getItems) return { AvailableVersions: [], AvailableAudioLanguages: [], AvailableSubtitleLanguages: [] };
+                return ApiClient.getItems(currentUserId, {
+                    ParentId: series.Id,
+                    IncludeItemTypes: 'Episode',
+                    Recursive: true,
+                    Fields: 'MediaSources,MediaStreams',
+                    Limit: 25
+                }).then(function (res) {
+                    const eps = (res && res.Items) ? res.Items : [];
+                    const vSet = new Set();
+                    const aSet = new Set();
+                    const sSet = new Set();
+
+                    eps.forEach(ep => {
+                        (ep.MediaSources || []).forEach(src => {
+                            if (src.Name && src.Name !== ep.Name) vSet.add(src.Name);
+                            (src.MediaStreams || []).forEach(st => {
+                                if (st.Type === 'Audio' && st.Language) aSet.add(st.Language.toLowerCase());
+                                if (st.Type === 'Subtitle' && st.Language) sSet.add(st.Language.toLowerCase());
+                            });
+                        });
+                    });
+
+                    return {
+                        AvailableVersions: Array.from(vSet),
+                        AvailableAudioLanguages: Array.from(aSet),
+                        AvailableSubtitleLanguages: Array.from(sSet)
+                    };
+                }).catch(e => ({ AvailableVersions: [], AvailableAudioLanguages: [], AvailableSubtitleLanguages: [] }));
+            });
+
+        // 2. Bestehenden Override abrufen (mit Fallback auf getPluginConfiguration)
+        const overridePromise = ApiClient.getJSON(ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}&targetUserId=${currentUserId}`))
+            .catch(function () {
+                return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                    const uPrefs = (cfg && cfg.UserPreferences) ? cfg.UserPreferences : [];
+                    const u = uPrefs.find(p => normalizeId(p.UserId) === normalizeId(currentUserId));
+                    if (u && u.SeriesOverrides) {
+                        return u.SeriesOverrides.find(o => normalizeId(o.SeriesId) === normalizeId(series.Id)) || null;
+                    }
+                    return null;
+                }).catch(e => null);
+            });
+
+        Promise.all([metaPromise, overridePromise]).then(function (results) {
             const metadata = results[0] || {};
-            const currentOverride = results[1] || null;
+            const rawOverride = results[1] || null;
+            // Falls das DTO nur leere Default-Werte enthält, als kein Override werten
+            const currentOverride = (rawOverride && (rawOverride.PreferredVersion || rawOverride.AudioLanguage || rawOverride.SubtitleLanguage || (rawOverride.SubtitleMode !== null && rawOverride.SubtitleMode !== undefined)))
+                ? rawOverride
+                : null;
 
             document.getElementById('dsModalLoading').style.display = 'none';
             document.getElementById('dsModalForm').style.display = 'block';
@@ -228,7 +281,7 @@
             const allAudios = Array.from(new Set([...(metadata.AvailableAudioLanguages || []), ...standardAudios]));
             allAudios.forEach(function (lang) {
                 const opt = document.createElement('option');
-                opt.value = lang;
+                opt.value = lang.toLowerCase();
                 opt.textContent = getLangName(lang);
                 audioSelect.appendChild(opt);
             });
@@ -239,25 +292,26 @@
             const allSubs = Array.from(new Set([...(metadata.AvailableSubtitleLanguages || []), ...standardSubs]));
             allSubs.forEach(function (lang) {
                 const opt = document.createElement('option');
-                opt.value = lang;
+                opt.value = lang.toLowerCase();
                 opt.textContent = getLangName(lang);
                 subSelect.appendChild(opt);
             });
 
-            // Vorhandene Werte setzen
+            // Vorhandene Werte vorselektieren
             if (currentOverride) {
                 if (currentOverride.PreferredVersion) {
-                    if (Array.from(verSelect.options).some(o => o.value.toLowerCase() === currentOverride.PreferredVersion.toLowerCase())) {
-                        verSelect.value = currentOverride.PreferredVersion;
+                    const matchOpt = Array.from(verSelect.options).find(o => o.value.toLowerCase() === currentOverride.PreferredVersion.toLowerCase());
+                    if (matchOpt) {
+                        verSelect.value = matchOpt.value;
                     } else {
                         document.getElementById('dsModalVersionCustom').value = currentOverride.PreferredVersion;
                     }
                 }
                 if (currentOverride.AudioLanguage) {
-                    audioSelect.value = currentOverride.AudioLanguage;
+                    audioSelect.value = currentOverride.AudioLanguage.toLowerCase();
                 }
                 if (currentOverride.SubtitleLanguage) {
-                    subSelect.value = currentOverride.SubtitleLanguage;
+                    subSelect.value = currentOverride.SubtitleLanguage.toLowerCase();
                 }
                 if (currentOverride.SubtitleMode !== null && currentOverride.SubtitleMode !== undefined) {
                     document.getElementById('dsModalSubModeSelect').value = currentOverride.SubtitleMode;
@@ -268,7 +322,16 @@
                 btnReset.onclick = function () {
                     ApiClient.ajax({
                         type: 'DELETE',
-                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}`)
+                        url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}&targetUserId=${currentUserId}`)
+                    }).catch(function () {
+                        return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                            cfg.UserPreferences = cfg.UserPreferences || [];
+                            const u = cfg.UserPreferences.find(p => normalizeId(p.UserId) === normalizeId(currentUserId));
+                            if (u && u.SeriesOverrides) {
+                                u.SeriesOverrides = u.SeriesOverrides.filter(o => normalizeId(o.SeriesId) !== normalizeId(series.Id));
+                                return ApiClient.updatePluginConfiguration(pluginId, cfg);
+                            }
+                        });
                     }).then(function () {
                         if (typeof Dashboard !== 'undefined' && Dashboard.alert) {
                             Dashboard.alert('Ausnahme für diese Serie wurde zurückgesetzt.');
@@ -281,13 +344,16 @@
             // Speichern
             document.getElementById('dsModalForm').onsubmit = function (e) {
                 e.preventDefault();
-                let version = verSelect.value || document.getElementById('dsModalVersionCustom').value.trim();
+                const customVer = document.getElementById('dsModalVersionCustom').value.trim();
+                let version = customVer || verSelect.value;
                 let audio = audioSelect.value;
                 let sub = subSelect.value;
                 let modeVal = document.getElementById('dsModalSubModeSelect').value;
                 let subMode = modeVal === '' ? null : parseInt(modeVal, 10);
 
                 const payload = {
+                    SeriesId: series.Id,
+                    SeriesName: series.Name,
                     AudioLanguage: audio || null,
                     SubtitleLanguage: sub || null,
                     SubtitleMode: subMode,
@@ -296,25 +362,44 @@
 
                 ApiClient.ajax({
                     type: 'POST',
-                    url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}`),
+                    url: ApiClient.getUrl(`Plugins/DefaultSettings/Series/${series.Id}?userId=${currentUserId}&targetUserId=${currentUserId}`),
                     data: JSON.stringify(payload),
                     contentType: 'application/json'
+                }).catch(function (err) {
+                    console.warn('[DefaultSettings] POST fehlgeschlagen, nutze updatePluginConfiguration Fallback:', err);
+                    return ApiClient.getPluginConfiguration(pluginId).then(function (cfg) {
+                        cfg.UserPreferences = cfg.UserPreferences || [];
+                        let u = cfg.UserPreferences.find(p => normalizeId(p.UserId) === normalizeId(currentUserId));
+                        if (!u) {
+                            u = { UserId: currentUserId, SeriesOverrides: [] };
+                            cfg.UserPreferences.push(u);
+                        }
+                        u.SeriesOverrides = u.SeriesOverrides || [];
+                        const exIdx = u.SeriesOverrides.findIndex(o => normalizeId(o.SeriesId) === normalizeId(series.Id));
+                        if (exIdx >= 0) {
+                            u.SeriesOverrides[exIdx] = payload;
+                        } else {
+                            u.SeriesOverrides.push(payload);
+                        }
+                        return ApiClient.updatePluginConfiguration(pluginId, cfg);
+                    });
                 }).then(function () {
                     if (typeof Dashboard !== 'undefined' && Dashboard.alert) {
                         Dashboard.alert('Standardeinstellungen für "' + series.Name + '" gespeichert!');
                     }
                     overlay.remove();
                 }).catch(function (err) {
-                    alert('Fehler beim Speichern: ' + err);
+                    alert('Fehler beim Speichern: ' + (err.message || err));
                 });
             };
 
         }).catch(function (err) {
-            document.getElementById('dsModalLoading').textContent = 'Fehler beim Laden: ' + err;
+            document.getElementById('dsModalLoading').textContent = 'Fehler beim Laden: ' + (err.message || err);
         });
     }
 
     function getLangName(code) {
+        if (!code) return '';
         const map = {
             'deu': 'Deutsch (deu)',
             'ger': 'Deutsch (ger)',
